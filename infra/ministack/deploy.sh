@@ -7,7 +7,7 @@ DISTRIBUTION_ID="_0shared_cloudfront"
 FRONTEND_DIR="../../frontend"
 
 echo "======================================"
-echo "Starting LocalStack Deploy(Ministack)"
+echo "Starting Ministack Deploy"
 echo "======================================"
 
 echo "Syncing files from $FRONTEND_DIR to s3://$BUCKET_NAME..."
