@@ -15,18 +15,26 @@ locals {
 }
 
 # Uploads all frontend files to S3
+# Generates env.js with the actual API Gateway URL
+resource "aws_s3_object" "env_config" {
+  bucket      = aws_s3_bucket._0shared_frontend_bucket.id
+  key         = "env.js"
+  content     = templatefile("${path.module}/../templates/env.tpl.js", {
+    api_endpoint = aws_apigatewayv2_api.api.api_endpoint
+  })
+  content_type = "application/javascript"
+}
+
+# Uploads all frontend build files to S3
 resource "aws_s3_object" "frontend_files" {
-  # fileset scans the entire folder and returns a list of relative paths
   for_each = fileset("${path.module}/../../../frontend/dist", "**/*")
 
   bucket      = aws_s3_bucket._0shared_frontend_bucket.id
   key         = each.value
-  source      = "${path.module}/../../../frontend/${each.value}"
+  source      = "${path.module}/../../../frontend/dist/${each.value}"
   
-  # Automatically updates the file in S3 if the local content changes
-  source_hash = filemd5("${path.module}/../../../frontend/${each.value}")
+  source_hash = filemd5("${path.module}/../../../frontend/dist/${each.value}")
 
-  # Adds the correct content-type based on the extension
   content_type = lookup(
     local.mime_types,
     regex("\\.[^.]+$", each.value),
