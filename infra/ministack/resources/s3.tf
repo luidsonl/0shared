@@ -2,18 +2,6 @@ resource "aws_s3_bucket" "_0shared_frontend_bucket" {
   bucket = "luidsonl-0shared-front"
 }
 
-resource "aws_s3_bucket_website_configuration" "frontend" {
-  bucket = aws_s3_bucket._0shared_frontend_bucket.id
-
-  index_document {
-    suffix = "index.html"
-  }
-
-  error_document {
-    key = "index.html"
-  }
-}
-
 resource "aws_s3_bucket_public_access_block" "frontend_block" {
   bucket = aws_s3_bucket._0shared_frontend_bucket.id
 
