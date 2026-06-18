@@ -7,3 +7,13 @@ output "cloudfront_id" {
   value       = aws_cloudfront_distribution._0shared_cloudfront.id
   description = "ID of the local CloudFront distribution"
 }
+
+output "api_endpoint" {
+  value       = aws_apigatewayv2_api.api.api_endpoint
+  description = "API Gateway endpoint URL"
+}
+
+output "api_id" {
+  value       = aws_apigatewayv2_api.api.id
+  description = "API Gateway ID"
+}

@@ -17,7 +17,7 @@ locals {
 # Uploads all frontend files to S3
 resource "aws_s3_object" "frontend_files" {
   # fileset scans the entire folder and returns a list of relative paths
-  for_each = fileset("${path.module}/../../../frontend", "**/*")
+  for_each = fileset("${path.module}/../../../frontend/dist", "**/*")
 
   bucket      = aws_s3_bucket._0shared_frontend_bucket.id
   key         = each.value
