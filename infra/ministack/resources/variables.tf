@@ -1,8 +1,3 @@
-variable "region" {
-  type    = string
-  default = "us-east-1"
-}
-
 variable "frontend_urls" {
   type        = list(string)
   description = "Public frontend URLs for Cognito callbacks. Defaults to S3 website endpoint."

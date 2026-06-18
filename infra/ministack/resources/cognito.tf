@@ -1,0 +1,84 @@
+resource "aws_cognito_user_pool" "main" {
+  name = "0shared-user-pool"
+
+  account_recovery_setting {
+    recovery_mechanism {
+      name     = "verified_email"
+      priority = 1
+    }
+  }
+
+  admin_create_user_config {
+    allow_admin_create_user_only = false
+  }
+
+  auto_verified_attributes = ["email"]
+
+  password_policy {
+    minimum_length    = 8
+    require_lowercase = true
+    require_numbers   = true
+    require_symbols   = false
+    require_uppercase = true
+  }
+
+  verification_message_template {
+    default_email_option = "CONFIRM_WITH_CODE"
+  }
+
+  email_configuration {
+    email_sending_account = "COGNITO_DEFAULT"
+  }
+
+  schema {
+    name                = "email"
+    attribute_data_type = "String"
+    required            = true
+    mutable             = true
+
+    string_attribute_constraints {
+      min_length = 3
+      max_length = 2048
+    }
+  }
+
+  schema {
+    name                = "name"
+    attribute_data_type = "String"
+    required            = false
+    mutable             = true
+
+    string_attribute_constraints {
+      min_length = 1
+      max_length = 256
+    }
+  }
+
+  tags = {
+    Name = "0shared-user-pool"
+  }
+}
+
+resource "aws_cognito_user_pool_client" "frontend" {
+  name         = "0shared-frontend-client"
+  user_pool_id = aws_cognito_user_pool.main.id
+
+  generate_secret = false
+
+  explicit_auth_flows = [
+    "ALLOW_USER_PASSWORD_AUTH",
+    "ALLOW_REFRESH_TOKEN_AUTH",
+  ]
+
+  allowed_oauth_flows                  = ["code"]
+  allowed_oauth_flows_user_pool_client = true
+  allowed_oauth_scopes                 = ["email", "openid", "profile"]
+  callback_urls                        = local.frontend_urls
+  logout_urls                          = local.frontend_urls
+  supported_identity_providers         = ["COGNITO"]
+}
+
+resource "aws_cognito_user_pool_domain" "main" {
+  domain       = "0shared-auth"
+  user_pool_id = aws_cognito_user_pool.main.id
+}

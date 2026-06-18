@@ -17,3 +17,18 @@ output "api_id" {
   value       = aws_apigatewayv2_api.api.id
   description = "API Gateway ID"
 }
+
+output "cognito_pool_id" {
+  value       = aws_cognito_user_pool.main.id
+  description = "Cognito User Pool ID"
+}
+
+output "cognito_client_id" {
+  value       = aws_cognito_user_pool_client.frontend.id
+  description = "Cognito User Pool Client ID (for frontend)"
+}
+
+output "cognito_domain" {
+  value       = aws_cognito_user_pool_domain.main.domain
+  description = "Cognito hosted UI domain"
+}

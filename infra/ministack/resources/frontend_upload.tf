@@ -20,7 +20,10 @@ resource "aws_s3_object" "env_config" {
   bucket      = aws_s3_bucket._0shared_frontend_bucket.id
   key         = "env.js"
   content     = templatefile("${path.module}/../templates/env.tpl.js", {
-    api_endpoint = aws_apigatewayv2_api.api.api_endpoint
+    api_endpoint      = aws_apigatewayv2_api.api.api_endpoint
+    cognito_pool_id   = aws_cognito_user_pool.main.id
+    cognito_client_id = aws_cognito_user_pool_client.frontend.id
+    cognito_domain    = aws_cognito_user_pool_domain.main.domain
   })
   content_type = "application/javascript"
 }
