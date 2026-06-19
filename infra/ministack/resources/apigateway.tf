@@ -15,23 +15,28 @@ resource "aws_apigatewayv2_stage" "default" {
   auto_deploy = true
 }
 
-resource "aws_apigatewayv2_integration" "health_integration" {
-  api_id             = aws_apigatewayv2_api.api.id
-  integration_type   = "AWS_PROXY"
-  integration_uri    = aws_lambda_function.health.invoke_arn
-  integration_method = "POST"
+data "aws_region" "current" {}
+
+resource "aws_apigatewayv2_authorizer" "cognito" {
+  api_id           = aws_apigatewayv2_api.api.id
+  authorizer_type  = "JWT"
+  identity_sources = ["$request.header.Authorization"]
+  name             = "cognito-authorizer"
+
+  jwt_configuration {
+    audience = [aws_cognito_user_pool_client.frontend.id]
+    issuer   = "https://cognito-idp.${data.aws_region.current.region}.amazonaws.com/${aws_cognito_user_pool.main.id}"
+  }
 }
 
-resource "aws_apigatewayv2_route" "health_route" {
-  api_id    = aws_apigatewayv2_api.api.id
-  route_key = "GET /health"
-  target    = "integrations/${aws_apigatewayv2_integration.health_integration.id}"
-}
+module "routes" {
+  source = "./routes"
 
-resource "aws_lambda_permission" "api_gw_health" {
-  statement_id  = "AllowExecutionFromAPIGateway"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.health.function_name
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_apigatewayv2_api.api.execution_arn}/*/*"
+  api_id                = aws_apigatewayv2_api.api.id
+  cognito_authorizer_id = aws_apigatewayv2_authorizer.cognito.id
+  health_lambda_arn     = module.lambdas.health_invoke_arn
+  health_lambda_name    = module.lambdas.health_function_name
+  auth_lambda_arn       = module.lambdas.auth_invoke_arn
+  auth_lambda_name      = module.lambdas.auth_function_name
+  api_execution_arn     = aws_apigatewayv2_api.api.execution_arn
 }

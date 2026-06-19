@@ -1,6 +1,10 @@
 resource "aws_cognito_user_pool" "main" {
   name = "0shared-user-pool"
 
+  lambda_config {
+    post_confirmation = module.lambdas.post_confirmation_function_arn
+  }
+
   account_recovery_setting {
     recovery_mechanism {
       name     = "verified_email"
@@ -57,4 +61,12 @@ resource "aws_cognito_user_pool_client" "frontend" {
 resource "aws_cognito_user_pool_domain" "main" {
   domain       = "0shared-auth"
   user_pool_id = aws_cognito_user_pool.main.id
+}
+
+resource "aws_lambda_permission" "cognito_post_confirmation" {
+  statement_id  = "AllowCognitoToInvokePostConfirmation"
+  action        = "lambda:InvokeFunction"
+  function_name = module.lambdas.post_confirmation_function_name
+  principal     = "cognito-idp.amazonaws.com"
+  source_arn    = aws_cognito_user_pool.main.arn
 }
