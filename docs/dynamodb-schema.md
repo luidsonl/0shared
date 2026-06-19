@@ -1,4 +1,4 @@
-# DynamoDB Schema — Single-Table Design
+# DynamoDB Schema - Single-Table Design
 
 **Table:** `0shared_data`
 **Billing:** PAY_PER_REQUEST
@@ -9,7 +9,7 @@
 
 | Key | Type | Description |
 |-----|------|-------------|
-| `PK` | HASH | `{ENTITY}#{entity_id}` — partition |
+| `PK` | HASH | `{ENTITY}#{entity_id}` - partition |
 | `SK` | RANGE | Item identifier within the partition |
 
 ---
@@ -18,11 +18,16 @@
 
 ### User
 
+Each user gets a **stable internal ID** (UUID v7, generated at signup). The username can change without affecting file ownership.
+
 | Attribute | Type | Source |
 |-----------|------|--------|
+| user_id | string (UUID v7) | Generated at signup |
 | sub | string | Cognito |
 | email | string | Cognito |
-| name | string | PUT /auth/me |
+| username | string | Defined at signup, mutable |
+| username_lower | string | Lowercase of `username`, for GSI lookup |
+| display_name | string | Optional, PUT /auth/me |
 | avatar_url | string | PUT /auth/me |
 | bio | string | PUT /auth/me |
 | created_at | string (ISO) | auto |
@@ -32,15 +37,19 @@
 
 | PK | SK |
 |----|----|
-| `USER#{sub}` | `USER` |
+| `USER#{user_id}` | `USER#PROFILE` |
 
 ### File
 
+Owned by a user's stable ID - survives username changes.
+
 | Attribute | Type |
 |-----------|------|
-| file_id | string (UUID) |
-| owner_sub | string |
+| file_id | string (UUID v7) |
+| owner_user_id | string (UUID v7) - stable owner reference |
+| owner_username | string - denormalized for display (stale on rename; refresh on list) |
 | name | string |
+| name_lower | string - lowercase, for name search |
 | size | number (bytes) |
 | content_type | string |
 | upload_date | string (ISO) |
@@ -50,65 +59,76 @@
 
 | PK | SK |
 |----|----|
-| `USER#{owner_sub}` | `FILE#{file_id}` |
+| `USER#{owner_user_id}` | `FILE#{file_id}` |
 
 ---
 
 ## Indexes
 
-### EntityCollection — List all items of a type
+### SubIndex - Lookup user by Cognito sub
 
-| Key | Type | Value |
-|-----|------|-------|
-| `entity_type` | HASH | `USER` or `FILE` |
-| `entity_sort` | RANGE | `{ENTITY}#{timestamp}#{id}` |
+| Key | Type | Value | Projection |
+|-----|------|-------|------------|
+| `sub` | HASH | Cognito `sub` value | `INCLUDE` (user_id, username) |
 
-```
-entity_type  |  entity_sort
-USER         |  USER#2026-01-01T00:00:00Z#abc123
-FILE         |  FILE#2026-06-18T12:00:00Z#file_xyz
-```
+Returns enough data to identify the user without a second fetch.
 
-### NameSearch — Search by name across entities
+| sub | SK | user_id | username |
+|-----|-----|---------|----------|
+| abc123 | USER#PROFILE | uuid-1 | joaosilva |
 
-| Key | Type | Value |
-|-----|------|-------|
-| `name_type` | HASH | `NAME#USER` or `NAME#FILE` |
-| `name_value` | RANGE | `{name_lowercase}#{entity_id}` |
+### UsernameIndex - Lookup user by username
 
-```
-name_type    |  name_value
-NAME#USER    |  joão silva#abc123
-NAME#USER    |  maria#def456
-NAME#FILE    |  relatorio.pdf#file_xyz
-NAME#FILE    |  foto.png#file_uvw
-```
+| Key | Type | Value | Projection |
+|-----|------|-------|------------|
+| `username_lower` | HASH | Lowercase username | `KEYS_ONLY` |
 
-### UploadDateIndex — Files by upload date
+One extra `GetItem` after the lookup, but keeps the PK decoupled from the username.
 
-| Key | Type | Value |
-|-----|------|-------|
-| `date_type` | HASH | `FILE#DATE` |
-| `date_value` | RANGE | `{upload_date}#{file_id}` |
+| username_lower | SK |
+|----------------|-----|
+| joaosilva | USER#uuid-1 |
+| mariacosta | USER#uuid-2 |
 
-```
-date_type    |  date_value
-FILE#DATE    |  2026-06-18T10:30:00Z#file_xyz
-FILE#DATE    |  2026-06-18T14:20:00Z#file_uvw
-```
+### NameSearch - Search users and files by name
 
-### DownloadCountIndex — Files by popularity
+| Key | Type | Value | Projection |
+|-----|------|-------|------------|
+| `gsiname_pk` | HASH | `NAME#USER` or `NAME#FILE#{shard}` | `KEYS_ONLY` |
+| `gsiname_sk` | RANGE | `{name_lower}#{entity_id}` |
 
-| Key | Type | Value |
-|-----|------|-------|
-| `down_type` | HASH | `FILE#DOWN` |
-| `down_value` | RANGE | `{download_count_padded}#{file_id}` |
+File names are sharded by first character hex (`NAME#FILE#6a`, `NAME#FILE#72`) to avoid a single hot partition.
 
-```
-down_type    |  down_value
-FILE#DOWN    |  0000000042#file_xyz
-FILE#DOWN    |  0000000128#file_uvw
-```
+| gsiname_pk | gsiname_sk |
+|------------|------------|
+| NAME#USER | joaosilva#uuid-1 |
+| NAME#USER | mariacosta#uuid-2 |
+| NAME#FILE#72 | relatorio.pdf#file-uuid |
+| NAME#FILE#66 | foto.png#file-uuid |
+
+### UploadDateIndex - Files by upload date
+
+| Key | Type | Value | Projection |
+|-----|------|-------|------------|
+| `gsidate_pk` | HASH | `FILE#DATE` | `KEYS_ONLY` |
+| `gsidate_sk` | RANGE | `{upload_date}#{file_id}` |
+
+| gsidate_pk | gsidate_sk |
+|------------|------------|
+| FILE#DATE | 2026-06-18T10:30:00Z#file-uuid |
+| FILE#DATE | 2026-06-18T14:20:00Z#file-uuid |
+
+### DownloadCountIndex - Files by popularity
+
+| Key | Type | Value | Projection |
+|-----|------|-------|------------|
+| `gsidown_pk` | HASH | `FILE#DOWN` | `KEYS_ONLY` |
+| `gsidown_sk` | RANGE | `{download_count_padded}#{file_id}` |
+
+| gsidown_pk | gsidown_sk |
+|------------|------------|
+| FILE#DOWN | 0000000042#file-uuid |
+| FILE#DOWN | 0000000128#file-uuid |
 
 > `download_count` must be stored zero-padded to 10 digits (e.g., `0000000042`) for correct lexicographic ordering.
 
@@ -118,14 +138,69 @@ FILE#DOWN    |  0000000128#file_uvw
 
 | # | Query | Index | Key Condition |
 |---|-------|-------|---------------|
-| 1 | Get user profile | — | `get_item(PK=USER#{sub}, SK=USER)` |
-| 2 | List user's files | — | `query(PK=USER#{sub}, begins_with(SK, FILE#))` |
-| 3 | List all users | EntityCollection | `entity_type=USER, begins_with(entity_sort, USER#)` |
-| 4 | List all files | EntityCollection | `entity_type=FILE, begins_with(entity_sort, FILE#)` |
-| 5 | Search users by name | NameSearch | `name_type=NAME#USER, begins_with(name_value, {name})` |
-| 6 | Search files by name | NameSearch | `name_type=NAME#FILE, begins_with(name_value, {name})` |
-| 7 | Filter files by date | UploadDateIndex | `date_type=FILE#DATE, between({start}, {end})` |
-| 8 | Top downloaded files | DownloadCountIndex | `down_type=FILE#DOWN, scan_forward=false` |
+| 1 | Get user by username | UsernameIndex | `username_lower = {lower(username)}` → `get_item(PK=USER#{user_id}, SK=USER#PROFILE)` |
+| 2 | Get user by Cognito sub | SubIndex | `sub = {sub}` |
+| 3 | List user's files | -- | `query(PK=USER#{user_id}, begins_with(SK, FILE#))` |
+| 4 | List all users | NameSearch | `gsiname_pk = NAME#USER` |
+| 5 | Search users by username | NameSearch | `gsiname_pk = NAME#USER, begins_with(gsiname_sk, {prefix})` |
+| 6 | Search files by name | NameSearch | `gsiname_pk = NAME#FILE#{shard}, begins_with(gsiname_sk, {prefix})` |
+| 7 | Filter files by date | UploadDateIndex | `gsidate_pk = FILE#DATE, between({start}, {end})` |
+| 8 | Top downloaded files | DownloadCountIndex | `gsidown_pk = FILE#DOWN, scan_forward=false` |
+
+---
+
+## Transactions & Constraints
+
+### Unique Username Constraint
+
+Each username must be globally unique. Enforced via a **reservation item** + **DynamoDB TransactWriteItems** at account creation.
+
+The username is set once during signup (after Cognito confirmation). It can be changed later, but the new value must also be globally unique.
+
+#### Reservation Item
+
+| PK | SK |
+|----|----|
+| `USERNAME#{username_lower}` | `RESERVED` |
+
+If this item exists, the username is taken. Its existence alone enforces the reservation - no additional data needed.
+
+#### Write Flow
+
+**Creating account with username (after Cognito signup):**
+```
+TransactWriteItems([
+  Put{ PK: "USERNAME#joaosilva", SK: "RESERVED" }
+    → Condition: attribute_not_exists(PK)
+  Put{ PK: "USER#uuid-1", SK: "USER#PROFILE",
+       user_id: "uuid-1", sub: "abc123",
+       username: "joaosilva", username_lower: "joaosilva", ... }
+])
+```
+
+**Changing username (from "joaosilva" to "mariacosta"):**
+```
+TransactWriteItems([
+  Delete{ PK: "USERNAME#joaosilva", SK: "RESERVED" }
+  Put{ PK: "USERNAME#mariacosta", SK: "RESERVED" }
+    → Condition: attribute_not_exists(PK)
+  Update{ PK: "USER#uuid-1", SK: "USER#PROFILE",
+          SET username = "mariacosta", username_lower = "mariacosta" }
+])
+```
+
+No files need to be moved - they are keyed by `user_id`, not by username.
+
+**Updating profile (same username):**
+Single `UpdateItem` on `USER#{user_id}` - no transaction needed.
+
+#### Transaction Rules
+
+| Operation | Transaction | Condition |
+|-----------|-------------|-----------|
+| Create account | 2-item Put | Reservation: `attribute_not_exists(PK)` |
+| Change username | Delete old reservation + Put new reservation + Update user profile | New reservation: `attribute_not_exists(PK)` |
+| Update profile | Single UpdateItem | -- |
 
 ---
 
@@ -135,3 +210,15 @@ FILE#DOWN    |  0000000128#file_uvw
 ENTITY_USER = "USER"
 ENTITY_FILE = "FILE"
 ```
+
+## Summary of fixes vs previous design
+
+| Problem | Fix |
+|---------|-----|
+| Username as PK forced file migration on rename | Stable `user_id` (UUID v7) - files live under `USER#{user_id}` |
+| Reservation items (`NAME#RESERVATION#`) polluted entity key space | `USERNAME#{username_lower}` - separate prefix, no entity overlap |
+| Case-unsafe PK (`USER#{username}` with possible mixed case) | Lookup via `username_lower` GSI; PK always uses stable UUID |
+| GSI projections undefined | Every GSI has explicit `ProjectionType` |
+| NameSearch hot partition (`NAME#FILE` for all files) | Sharded by first character hex (`NAME#FILE#{shard}`) |
+| Bloated attribute names on every item | Generic `gsiname_*` / `gsidate_*` / `gsidown_*` prefix to avoid overloading domain attributes |
+| File ownership coupled to mutable username | `owner_user_id` + denormalized (stale-tolerant) `owner_username` |
