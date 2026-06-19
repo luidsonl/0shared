@@ -30,30 +30,6 @@ resource "aws_cognito_user_pool" "main" {
     email_sending_account = "COGNITO_DEFAULT"
   }
 
-  schema {
-    name                = "email"
-    attribute_data_type = "String"
-    required            = true
-    mutable             = true
-
-    string_attribute_constraints {
-      min_length = 3
-      max_length = 2048
-    }
-  }
-
-  schema {
-    name                = "name"
-    attribute_data_type = "String"
-    required            = false
-    mutable             = true
-
-    string_attribute_constraints {
-      min_length = 1
-      max_length = 256
-    }
-  }
-
   tags = {
     Name = "0shared-user-pool"
   }
