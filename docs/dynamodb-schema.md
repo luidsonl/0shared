@@ -65,11 +65,25 @@ Owned by a user's stable ID - survives username changes.
 
 ## Indexes
 
+### Local Secondary Indexes
+
+None. The table's SK (range key) already supports `begins_with` and `between` queries. All secondary access patterns are covered by GSIs.
+
+### Global Secondary Indexes
+
+| Index Name | Type | Hash Key | Range Key | Projection | Entity |
+|-----------|------|----------|-----------|------------|--------|
+| SubIndex | GSI | `sub` | (none) | `INCLUDE` (user_id, username) | User |
+| UsernameIndex | GSI | `username_lower` | (none) | `KEYS_ONLY` | User |
+| NameSearch | GSI | `gsiname_pk` | `gsiname_sk` | `KEYS_ONLY` | User, File |
+| UploadDateIndex | GSI | `gsidate_pk` | `gsidate_sk` | `KEYS_ONLY` | File |
+| DownloadCountIndex | GSI | `gsidown_pk` | `gsidown_sk` | `KEYS_ONLY` | File |
+
 ### SubIndex - Lookup user by Cognito sub
 
-| Key | Type | Value | Projection |
-|-----|------|-------|------------|
-| `sub` | HASH | Cognito `sub` value | `INCLUDE` (user_id, username) |
+| Key | Type | Value |
+|-----|------|-------|
+| `sub` | HASH | Cognito `sub` value |
 
 Returns enough data to identify the user without a second fetch.
 
@@ -79,9 +93,9 @@ Returns enough data to identify the user without a second fetch.
 
 ### UsernameIndex - Lookup user by username
 
-| Key | Type | Value | Projection |
-|-----|------|-------|------------|
-| `username_lower` | HASH | Lowercase username | `KEYS_ONLY` |
+| Key | Type | Value |
+|-----|------|-------|
+| `username_lower` | HASH | Lowercase username |
 
 One extra `GetItem` after the lookup, but keeps the PK decoupled from the username.
 
@@ -92,9 +106,9 @@ One extra `GetItem` after the lookup, but keeps the PK decoupled from the userna
 
 ### NameSearch - Search users and files by name
 
-| Key | Type | Value | Projection |
-|-----|------|-------|------------|
-| `gsiname_pk` | HASH | `NAME#USER` or `NAME#FILE#{shard}` | `KEYS_ONLY` |
+| Key | Type | Value |
+|-----|------|-------|
+| `gsiname_pk` | HASH | `NAME#USER` or `NAME#FILE#{shard}` |
 | `gsiname_sk` | RANGE | `{name_lower}#{entity_id}` |
 
 File names are sharded by first character hex (`NAME#FILE#6a`, `NAME#FILE#72`) to avoid a single hot partition.
@@ -108,9 +122,9 @@ File names are sharded by first character hex (`NAME#FILE#6a`, `NAME#FILE#72`) t
 
 ### UploadDateIndex - Files by upload date
 
-| Key | Type | Value | Projection |
-|-----|------|-------|------------|
-| `gsidate_pk` | HASH | `FILE#DATE` | `KEYS_ONLY` |
+| Key | Type | Value |
+|-----|------|-------|
+| `gsidate_pk` | HASH | `FILE#DATE` |
 | `gsidate_sk` | RANGE | `{upload_date}#{file_id}` |
 
 | gsidate_pk | gsidate_sk |
@@ -120,9 +134,9 @@ File names are sharded by first character hex (`NAME#FILE#6a`, `NAME#FILE#72`) t
 
 ### DownloadCountIndex - Files by popularity
 
-| Key | Type | Value | Projection |
-|-----|------|-------|------------|
-| `gsidown_pk` | HASH | `FILE#DOWN` | `KEYS_ONLY` |
+| Key | Type | Value |
+|-----|------|-------|
+| `gsidown_pk` | HASH | `FILE#DOWN` |
 | `gsidown_sk` | RANGE | `{download_count_padded}#{file_id}` |
 
 | gsidown_pk | gsidown_sk |
