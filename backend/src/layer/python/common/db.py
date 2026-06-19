@@ -67,8 +67,35 @@ def update_user(user_id: str, updates: dict) -> dict | None:
     return get_user(user_id)
 
 
-def transact_set_username(user_id: str, username: str, username_lower: str) -> bool:
+def transact_set_username(user_id: str, username: str, username_lower: str, sub: str = "", email: str = "") -> bool:
     client = boto3.client("dynamodb")
+    now = now_iso()
+
+    set_parts = ["#username = :un", "#username_lower = :ul", "#updated_at = :now"]
+    names = {
+        "#username": "username",
+        "#username_lower": "username_lower",
+        "#updated_at": "updated_at",
+    }
+    values = {
+        ":un": {"S": username},
+        ":ul": {"S": username_lower},
+        ":now": {"S": now},
+    }
+
+    if sub:
+        set_parts.append("#user_id = :uid")
+        set_parts.append("#sub = :sub")
+        set_parts.append("#email = :em")
+        set_parts.append("#created_at = :now")
+        names["#user_id"] = "user_id"
+        names["#sub"] = "sub"
+        names["#email"] = "email"
+        names["#created_at"] = "created_at"
+        values[":uid"] = {"S": user_id}
+        values[":sub"] = {"S": sub}
+        values[":em"] = {"S": email}
+
     try:
         client.transact_write_items(
             TransactItems=[
@@ -89,17 +116,9 @@ def transact_set_username(user_id: str, username: str, username_lower: str) -> b
                             "PK": {"S": f"USER#{user_id}"},
                             "SK": {"S": "USER#PROFILE"},
                         },
-                        "UpdateExpression": "SET #username = :un, #username_lower = :ul, #updated_at = :now",
-                        "ExpressionAttributeNames": {
-                            "#username": "username",
-                            "#username_lower": "username_lower",
-                            "#updated_at": "updated_at",
-                        },
-                        "ExpressionAttributeValues": {
-                            ":un": {"S": username},
-                            ":ul": {"S": username_lower},
-                            ":now": {"S": now_iso()},
-                        },
+                        "UpdateExpression": "SET " + ", ".join(set_parts),
+                        "ExpressionAttributeNames": names,
+                        "ExpressionAttributeValues": values,
                         "ConditionExpression": "attribute_not_exists(#username)",
                     }
                 },

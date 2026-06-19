@@ -79,7 +79,7 @@ def handle_signup(event):
 
     if not user:
         user_id = generate_user_id()
-        result = transact_set_username(user_id, username, username_lower)
+        result = transact_set_username(user_id, username, username_lower, sub=sub, email=email)
         if not result:
             return ErrorResponse("Conflict", "Username already taken", 409).to_lambda_response()
         return SignupResponse(user_id=user_id, username=username, email=email).to_lambda_response()
@@ -87,7 +87,7 @@ def handle_signup(event):
     if user.get("username"):
         return ErrorResponse("Conflict", "Username already set", 409).to_lambda_response()
 
-    result = transact_set_username(user["user_id"], username, username_lower)
+    result = transact_set_username(user["user_id"], username, username_lower, sub=sub, email=email)
     if not result:
         return ErrorResponse("Conflict", "Username already taken", 409).to_lambda_response()
 
