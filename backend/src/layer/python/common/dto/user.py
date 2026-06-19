@@ -36,7 +36,7 @@ class UserResponse:
     user_id: str
     sub: str
     email: str
-    username: str
+    username: Optional[str] = None
     display_name: Optional[str] = None
     avatar_url: Optional[str] = None
     bio: Optional[str] = None
@@ -67,6 +67,9 @@ class UpdateProfileRequest:
     @classmethod
     def from_dict(cls, data: dict) -> "UpdateProfileRequest":
         return _from_dict(cls, data)
+
+    def to_dict(self) -> dict:
+        return _to_dict(self)
 
 
 @dataclass
