@@ -1,6 +1,6 @@
 # 0shared
 
-**0shared** is a serverless file-sharing platform using AWS services. It is currently provisioned for local development using **Ministack/LocalStack**, with plans to transition to native AWS.
+**0shared** is a serverless file-sharing platform deployed directly to AWS.
 
 ---
 
@@ -38,8 +38,32 @@ The backend will be implemented using Python and `boto3`.
 
 ## Environments
 
-### Local Development (Ministack)
-The Terraform infrastructure (`infra/ministack`) runs locally using Ministack/LocalStack for development and testing.
+### AWS
 
-### Production (AWS)
-The Terraform configurations will be adapted to deploy the architecture directly to an AWS account for production.
+The Terraform infrastructure (`infra/aws`) provisions all resources directly in AWS.
+Ministack/LocalStack is no longer used for development due to infrastructure
+limitations — even though Ministack is excellent for studying purposes.
+
+#### 1. Bootstrap (State Backend)
+
+Creates the S3 bucket and DynamoDB table for Terraform state management.
+Run this once per AWS account.
+
+```bash
+cd infra/aws-bootstrap
+terraform init
+terraform apply
+```
+
+#### 2. Deploy Main Infrastructure
+
+```bash
+cd infra/aws
+terraform init
+terraform apply
+```
+
+### Ministack (Study Only)
+
+The old LocalStack-based setup lives in `infra/ministack`. Not recommended for
+active development — kept for reference.
