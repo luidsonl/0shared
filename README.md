@@ -46,7 +46,7 @@ limitations — even though Ministack is excellent for studying purposes.
 
 #### 1. Bootstrap (State Backend)
 
-Creates the S3 bucket and DynamoDB table for Terraform state management.
+Creates the S3 bucket for Terraform state management.
 Run this once per AWS account.
 
 ```bash
