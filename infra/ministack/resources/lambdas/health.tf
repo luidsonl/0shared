@@ -6,7 +6,7 @@ data "archive_file" "health_lambda_zip" {
 
 resource "aws_lambda_function" "health" {
   filename         = data.archive_file.health_lambda_zip.output_path
-  function_name    = "0shared-health"
+  function_name    = "${var.project_name}-health"
   role             = var.lambda_role_arn
   handler          = "health.lambda_handler"
   runtime          = "python3.10"

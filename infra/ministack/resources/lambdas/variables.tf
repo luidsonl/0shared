@@ -5,3 +5,7 @@ variable "lambda_role_arn" {
 variable "common_layer_arn" {
   type = string
 }
+
+variable "project_name" {
+  type = string
+}

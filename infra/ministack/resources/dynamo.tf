@@ -1,5 +1,5 @@
 resource "aws_dynamodb_table" "_0shared_data" {
-  name         = "0shared_data"
+  name         = "${var.project_name}_data"
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "PK"
   range_key    = "SK"
@@ -46,8 +46,8 @@ resource "aws_dynamodb_table" "_0shared_data" {
   }
 
   global_secondary_index {
-    name            = "SubIndex"
-    projection_type = "INCLUDE"
+    name               = "SubIndex"
+    projection_type    = "INCLUDE"
     non_key_attributes = ["user_id", "username"]
 
     key_schema {

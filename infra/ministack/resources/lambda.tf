@@ -16,7 +16,7 @@ data "aws_iam_policy_document" "lambda_assume_role" {
 }
 
 resource "aws_iam_role" "lambda_exec_role" {
-  name               = "0shared_lambda_exec_role"
+  name               = "${var.project_name}_lambda_exec_role"
   assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
 }
 
@@ -26,8 +26,8 @@ resource "aws_iam_role_policy_attachment" "lambda_basic_execution" {
 }
 
 resource "aws_iam_policy" "dynamodb_access" {
-  name        = "0shared_dynamodb_access"
-  description = "Allow Lambda to access 0shared_data DynamoDB table"
+  name        = "${var.project_name}_dynamodb_access"
+  description = "Allow Lambda to access ${var.project_name}_data DynamoDB table"
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -54,9 +54,9 @@ resource "aws_iam_role_policy_attachment" "lambda_dynamodb" {
 }
 
 resource "aws_lambda_layer_version" "common" {
-  filename         = data.archive_file.common_layer_zip.output_path
-  layer_name       = "0shared-common"
-  source_code_hash = data.archive_file.common_layer_zip.output_base64sha256
+  filename            = data.archive_file.common_layer_zip.output_path
+  layer_name          = "${var.project_name}-common"
+  source_code_hash    = data.archive_file.common_layer_zip.output_base64sha256
   compatible_runtimes = ["python3.10"]
 }
 
@@ -65,4 +65,5 @@ module "lambdas" {
 
   lambda_role_arn  = aws_iam_role.lambda_exec_role.arn
   common_layer_arn = aws_lambda_layer_version.common.arn
+  project_name     = var.project_name
 }

@@ -6,7 +6,7 @@ data "archive_file" "post_confirmation_lambda_zip" {
 
 resource "aws_lambda_function" "post_confirmation" {
   filename         = data.archive_file.post_confirmation_lambda_zip.output_path
-  function_name    = "0shared-post-confirmation"
+  function_name    = "${var.project_name}-post-confirmation"
   role             = var.lambda_role_arn
   handler          = "post_confirmation.lambda_handler"
   runtime          = "python3.10"

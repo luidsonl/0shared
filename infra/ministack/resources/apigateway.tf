@@ -1,5 +1,5 @@
 resource "aws_apigatewayv2_api" "api" {
-  name          = "0shared-api"
+  name          = "${var.project_name}-api"
   protocol_type = "HTTP"
 
   cors_configuration {
@@ -21,7 +21,7 @@ resource "aws_apigatewayv2_authorizer" "cognito" {
   api_id           = aws_apigatewayv2_api.api.id
   authorizer_type  = "JWT"
   identity_sources = ["$request.header.Authorization"]
-  name             = "cognito-authorizer"
+  name             = "${var.project_name}-cognito-authorizer"
 
   jwt_configuration {
     audience = [aws_cognito_user_pool_client.frontend.id]
