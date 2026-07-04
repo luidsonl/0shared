@@ -9,6 +9,6 @@ resource "aws_lambda_function" "health" {
   function_name    = "0shared-health"
   role             = var.lambda_role_arn
   handler          = "health.lambda_handler"
-  runtime          = "python3.10"
+  runtime          = "python3.13"
   source_code_hash = data.archive_file.health_lambda_zip.output_base64sha256
 }

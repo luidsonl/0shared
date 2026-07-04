@@ -9,7 +9,7 @@ resource "aws_lambda_function" "post_confirmation" {
   function_name    = "0shared-post-confirmation"
   role             = var.lambda_role_arn
   handler          = "post_confirmation.lambda_handler"
-  runtime          = "python3.10"
+  runtime          = "python3.13"
   source_code_hash = data.archive_file.post_confirmation_lambda_zip.output_base64sha256
   layers           = [var.common_layer_arn]
 }

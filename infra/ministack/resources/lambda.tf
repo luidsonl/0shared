@@ -57,7 +57,7 @@ resource "aws_lambda_layer_version" "common" {
   filename            = data.archive_file.common_layer_zip.output_path
   layer_name          = "${var.project_name}-common"
   source_code_hash    = data.archive_file.common_layer_zip.output_base64sha256
-  compatible_runtimes = ["python3.10"]
+  compatible_runtimes = ["python3.13"]
 }
 
 module "lambdas" {
