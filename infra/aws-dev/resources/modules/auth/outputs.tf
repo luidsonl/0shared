@@ -1,9 +1,13 @@
-output "health_function_name" {
-  value = aws_lambda_function.health.function_name
+output "pool_id" {
+  value = aws_cognito_user_pool.this.id
 }
 
-output "health_invoke_arn" {
-  value = aws_lambda_function.health.invoke_arn
+output "client_id" {
+  value = aws_cognito_user_pool_client.this.id
+}
+
+output "domain" {
+  value = aws_cognito_user_pool_domain.this.domain
 }
 
 output "auth_function_name" {
