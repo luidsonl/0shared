@@ -1,5 +1,5 @@
 resource "aws_dynamodb_table" "_0shared_data" {
-  name         = "0shared_data"
+  name         = "${var.project_name}_${var.environment}"
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "PK"
   range_key    = "SK"

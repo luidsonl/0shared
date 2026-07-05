@@ -1,8 +1,4 @@
 locals {
   name_prefix = "${var.project_name}-${var.environment}"
   full_prefix = "${var.namespace}-${var.project_name}-${var.environment}"
-
-  frontend_urls = [
-    "https://${aws_cloudfront_distribution._0shared_cloudfront.domain_name}",
-  ]
 }

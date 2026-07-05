@@ -1,5 +1,5 @@
 resource "aws_s3_bucket" "_0shared_frontend_bucket" {
-  bucket = "luidsonl-0shared-front"
+  bucket = "${local.full_prefix}-front"
 }
 
 resource "aws_s3_bucket_public_access_block" "frontend_block" {
@@ -38,7 +38,7 @@ resource "aws_s3_bucket_policy" "frontend_policy" {
 }
 
 resource "aws_s3_bucket" "_0shared_files_bucket" {
-  bucket = "luidsonl-0shared-files"
+  bucket = "${local.full_prefix}-files"
 }
 
 resource "aws_s3_bucket_public_access_block" "files_block" {

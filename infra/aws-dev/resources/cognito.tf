@@ -1,5 +1,5 @@
 resource "aws_cognito_user_pool" "main" {
-  name = "0shared-user-pool"
+  name = "${local.name_prefix}-user-pool"
 
   lambda_config {
     post_confirmation = module.lambdas.post_confirmation_function_arn
@@ -35,12 +35,12 @@ resource "aws_cognito_user_pool" "main" {
   }
 
   tags = {
-    Name = "0shared-user-pool"
+    Name = "${local.name_prefix}-user-pool"
   }
 }
 
 resource "aws_cognito_user_pool_client" "frontend" {
-  name         = "0shared-frontend-client"
+  name         = "${local.name_prefix}-frontend-client"
   user_pool_id = aws_cognito_user_pool.main.id
 
   generate_secret = false
@@ -59,7 +59,7 @@ resource "aws_cognito_user_pool_client" "frontend" {
 }
 
 resource "aws_cognito_user_pool_domain" "main" {
-  domain       = "luidsonl-0shared-auth"
+  domain       = "${local.full_prefix}-auth"
   user_pool_id = aws_cognito_user_pool.main.id
 }
 

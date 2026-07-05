@@ -6,7 +6,7 @@ data "archive_file" "auth_lambda_zip" {
 
 resource "aws_lambda_function" "auth" {
   filename         = data.archive_file.auth_lambda_zip.output_path
-  function_name    = "0shared-auth"
+  function_name    = "${var.name_prefix}-auth"
   role             = var.lambda_role_arn
   handler          = "handler.lambda_handler"
   runtime          = "python3.13"
