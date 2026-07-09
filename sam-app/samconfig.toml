@@ -17,7 +17,7 @@ capabilities = "CAPABILITY_IAM"
 confirm_changeset = false
 s3_prefix = "app-0shared-backend"
 resolve_s3 = true
-parameter_overrides = 'DynamoDBTableName="0shared_dev" FilesBucketName="luidsonl-0shared-dev-files"'
+parameter_overrides = 'DynamoDBTableName="0shared" FilesBucketName="luidsonl-0shared-files"'
 
 [default.package.parameters]
 resolve_s3 = true

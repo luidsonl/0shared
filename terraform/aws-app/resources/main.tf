@@ -3,7 +3,7 @@
 # ---------------------------------------------------------------------------
 module "database" {
   source     = "./modules/database"
-  table_name = "${var.project_name}_${var.environment}"
+  table_name = "${var.project_name}${local.env_under}"
 }
 
 module "files" {

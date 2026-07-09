@@ -1,6 +1,6 @@
 # DynamoDB Schema - Single-Table Design
 
-**Table:** `0shared_data`
+**Table:** `0shared`
 **Billing:** PAY_PER_REQUEST
 
 ---

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TABLE="${TABLE_NAME:-0shared_dev}"
-BUCKET="${BUCKET_NAME:-luidsonl-0shared-dev-files}"
+TABLE="${TABLE_NAME:-0shared}"
+BUCKET="${BUCKET_NAME:-luidsonl-0shared-files}"
 DRY_RUN=false
 
 while [[ $# -gt 0 ]]; do
