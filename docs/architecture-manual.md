@@ -43,10 +43,9 @@ This document describes the architecture, tooling decisions, and integration pat
 Terraform manages all **stateful, long-lived infrastructure**:
 
 | Resource | Responsibility |
-|---|---|
-| `terraform/bootstrap/` | S3 bucket for state files, DynamoDB table for state locking |
-| `terraform/app/` | DynamoDB tables, SSM parameters |
-| `terraform/frontend/` | S3 bucket for static files, CloudFront distribution, OAC |
+|---|---|---|
+| `infra/aws-bootstrap/` | S3 bucket for Terraform state |
+| `infra/aws-dev/` | DynamoDB tables, S3 buckets (files + frontend), CloudFront distribution, OAC |
 
 **Why Terraform for these?**
 - DynamoDB tables are stateful — deleting and recreating them loses data.
@@ -90,10 +89,10 @@ Outputs:
       Name: sam-app-ApiEndpoint
 ```
 
-Terraform reads the export using a data source:
+Terraform reads the export using a data source in the frontend module:
 
 ```hcl
-# terraform/frontend/main.tf
+# infra/aws-dev/resources/modules/frontend/main.tf
 data "aws_cloudformation_export" "api_url" {
   name = "sam-app-ApiEndpoint"
 }
@@ -119,13 +118,13 @@ Parameters:
 ```bash
 # Deploy command
 sam deploy --parameter-overrides \
-  DynamoDBTableName=$(terraform -chdir=../terraform/app output -raw dynamodb_table_name)
+  DynamoDBTableName=$(terraform -chdir=../infra/aws-dev output -raw dynamodb_table_name)
 ```
 
 **Flow:**
 
 ```
-Terraform apply ──► terraform output ──► SAM --parameter-overrides ──► Lambda env vars
+Terraform apply ──► terraform -chdir=../infra/aws-dev output ──► SAM --parameter-overrides ──► Lambda env vars
 ```
 
 ---
@@ -133,18 +132,16 @@ Terraform apply ──► terraform output ──► SAM --parameter-overrides �
 ## Deployment Order
 
 ```
- 1. terraform/bootstrap/     (one-time)
- 2. terraform/app/           (DynamoDB)
- 3. sam-app/                 (Lambda + API Gateway)
- 4. terraform/frontend/      (S3 + CloudFront + frontend build)
+ 1. infra/aws-bootstrap/     (one-time S3 state bucket)
+ 2. infra/aws-dev/           (DynamoDB, S3 buckets, CloudFront, frontend dist)
+ 3. sam-app/                 (Lambda + API Gateway — future)
 ```
 
 Dependencies between steps:
 
 ```
 Step 2 → exports table name → consumed by Step 3
-Step 3 → exports API URL    → consumed by Step 4
-Step 4 → builds frontend     → uploads to S3 → invalidates CloudFront
+Step 3 → exports API URL    → consumed by frontend at runtime
 ```
 
 ---
@@ -228,33 +225,37 @@ Terminal 3:     (optional) aws dynamodb    (interact directly with DynamoDB)
 ## Project Structure
 
 ```
-├── terraform/
-│   ├── bootstrap/
-│   │   ├── main.tf         # S3 bucket + DynamoDB lock table
-│   │   ├── variables.tf
-│   │   └── outputs.tf
-│   ├── app/
-│   │   ├── main.tf         # Provider + backend config
-│   │   ├── dynamodb.tf     # DynamoDB table + SSM parameters
-│   │   ├── variables.tf    # billing_mode, PITR, environment
-│   │   └── outputs.tf      # table name, ARN, SSM paths
-│   └── frontend/
-│       ├── main.tf         # S3 + CloudFront + OAC + deploy
+├── infra/
+│   ├── aws-bootstrap/      # S3 bucket for Terraform state
+│   │   ├── main.tf
+│   │   ├── outputs.tf
+│   │   └── providers.tf
+│   └── aws-dev/            # Main infrastructure
+│       ├── resources/
+│       │   ├── main.tf         # Module wiring + frontend dist upload
+│       │   ├── outputs.tf
+│       │   ├── locals.tf
+│       │   ├── variables.tf
+│       │   └── modules/
+│       │       ├── database/   # DynamoDB table
+│       │       ├── files/      # S3 bucket for user files
+│       │       └── frontend/   # S3 bucket + CloudFront + OAC
+│       ├── backend.tf
+│       ├── providers.tf
 │       ├── variables.tf
-│       └── outputs.tf
+│       ├── outputs.tf
+│       └── terraform.tfvars
 ├── frontend/
-│   ├── src/App.tsx         # React SPA (list + create items)
-│   ├── vite.config.ts      # Dev proxy /api → :3000
+│   ├── src/                  # React SPA
+│   ├── vite.config.ts        # Dev proxy /api → :3000
 │   └── package.json
 ├── docs/
-│   ├── data-model.md       # DynamoDB schema documentation
+│   ├── data-model.md         # DynamoDB schema documentation
 │   └── architecture-manual.md
-└── sam-app/
-    ├── template.yaml       # Lambda functions + REST API
-    ├── src/handlers/       # Business logic (Node.js ESM)
-    ├── events/             # Sample invocation events
-    ├── __tests__/          # Unit tests (Jest)
-    └── env.json            # Local environment variables
+└── sam-app/                  # (future) Lambda + API Gateway
+    ├── template.yaml
+    ├── src/handlers/
+    └── ...
 ```
 
 ---
@@ -266,19 +267,18 @@ Terminal 3:     (optional) aws dynamodb    (interact directly with DynamoDB)
 | **REST API over HTTP API** | `sam local start-api` has better support for REST API (`Type: Api`) |
 | **CloudFront over direct API** | Single domain for frontend + API, no CORS needed |
 | **Relative API paths** (`/api/items`) | Same code works in dev (Vite proxy) and prod (CloudFront) |
-| **Two Terraform directories** | Avoids coupling bootstrap (one-time) with app (iterative) |
+| **Single Terraform config** | Bootstrap (one-time) lives in `infra/aws-bootstrap/`; all app infra lives together in `infra/aws-dev/` |
 | **CloudFormation Export** | Cleanest way to pass values from SAM to Terraform without SSM costs |
-| **`null_resource` for deploy** | Frontend build + upload + invalidation in a single `terraform apply` |
+| **`aws_s3_object` for deploy** | Frontend dist uploads + CloudFront invalidation in a single `terraform apply` |
 
 ---
 
 ## Clean Up Order
 
 ```bash
-terraform/frontend/ destroy    # CloudFront + S3 + frontend files
-sam delete                     # Lambda + API Gateway
-terraform/app/ destroy         # DynamoDB table
-terraform/bootstrap/ destroy   # State bucket + lock table (optional)
+cd infra/aws-dev && terraform destroy   # CloudFront + S3 + DynamoDB + frontend files
+sam delete                              # Lambda + API Gateway
+cd infra/aws-bootstrap && terraform destroy  # State bucket (optional)
 ```
 
 Dependencies flow forward, so destroy must happen in reverse.
@@ -291,18 +291,18 @@ Dependencies flow forward, so destroy must happen in reverse.
 
 1. Add a new handler in `sam-app/src/handlers/`
 2. Add a new resource in `sam-app/template.yaml` with `Type: AWS::Serverless::Function` and an `Api` event
-3. Add a new path in `terraform/frontend/main.tf` → `ordered_cache_behavior` if needed
+3. Add a new cache behavior in `infra/aws-dev/resources/modules/frontend/main.tf` → `ordered_cache_behavior` if needed
 
 ### Adding a New DynamoDB Table
 
-1. Add a new `aws_dynamodb_table` resource in `terraform/app/dynamodb.tf`
+1. Add a new `aws_dynamodb_table` resource in `infra/aws-dev/resources/modules/database/main.tf`
 2. Export the table name as a Terraform output
 3. Pass it to SAM via `--parameter-overrides`
 4. Add IAM permissions in SAM (`DynamoDBCrudPolicy`)
 
 ### Adding Authentication
 
-1. Create a Cognito User Pool in Terraform (`terraform/app/`)
+1. Create a Cognito User Pool in Terraform (`infra/aws-dev/resources/modules/auth/main.tf`)
 2. Export the User Pool ID and App Client ID
 3. Add a Cognito authorizer in SAM (`template.yaml`)
 4. Configure CloudFront to forward auth headers to API Gateway
