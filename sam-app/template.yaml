@@ -44,6 +44,37 @@ Resources:
         - S3ReadPolicy:
             BucketName: !Ref FilesBucketName
 
+  AuthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/handlers/
+      Handler: auth.lambdaHandler
+      Events:
+        Signup:
+          Type: Api
+          Properties:
+            Path: /auth/signup
+            Method: POST
+        Login:
+          Type: Api
+          Properties:
+            Path: /auth/login
+            Method: POST
+        Logout:
+          Type: Api
+          Properties:
+            Path: /auth/logout
+            Method: POST
+        Me:
+          Type: Api
+          Properties:
+            Path: /auth/me
+            Method: GET
+      Policies:
+        - CloudWatchPutMetricPolicy: {}
+        - DynamoDBCrudPolicy:
+            TableName: !Ref DynamoDBTableName
+
 Outputs:
   ApiEndpoint:
     Description: "API Gateway endpoint URL (Prod stage)"

@@ -1,0 +1,11 @@
+{
+  "httpMethod": "POST",
+  "path": "/auth/logout",
+  "headers": {
+    "Authorization": "Bearer 5b7dcdc2-0b13-4b80-ac1e-5190a752dfee"
+  },
+  "body": null,
+  "requestContext": {
+    "stage": "Prod"
+  }
+}

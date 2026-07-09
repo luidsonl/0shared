@@ -23,10 +23,10 @@ Each user gets a **stable internal ID** (UUID v7, generated at signup). The user
 | Attribute | Type | Source |
 |-----------|------|--------|
 | user_id | string (UUID v7) | Generated at signup |
-| sub | string | Cognito |
-| email | string | Cognito |
+| email | string | Signup form |
 | username | string | Defined at signup, mutable |
 | username_lower | string | Lowercase of `username`, for GSI lookup |
+| passwordHash | string | bcrypt hash of user's password |
 | display_name | string | Optional, PUT /auth/me |
 | avatar_url | string | PUT /auth/me |
 | bio | string | PUT /auth/me |
@@ -37,7 +37,27 @@ Each user gets a **stable internal ID** (UUID v7, generated at signup). The user
 
 | PK | SK |
 |----|----|
-| `USER#{user_id}` | `USER#PROFILE` |
+| `USER#{user_id}` | `PROFILE` |
+
+### Session
+
+Created at login, destroyed at logout or after 7 days.
+
+| Attribute | Type | Source |
+|-----------|------|--------|
+| token | string (UUID v4) | Generated at login |
+| userId | string | User's stable ID |
+| expiresAt | string (ISO) | now + 7 days |
+| createdAt | string (ISO) | auto |
+
+#### Keys
+
+| PK | SK |
+|----|----|
+| `SESSION#{token}` | `SESSION#{token}` |
+| `USER#{userId}` | `SESSION#{token}` |
+
+The `SESSION#<token>` item is used for Bearer token validation. The `USER#<userId>/SESSION#<token>` item lists a user's active sessions.
 
 ### File
 
@@ -73,23 +93,24 @@ None. The table's SK (range key) already supports `begins_with` and `between` qu
 
 | Index Name | Type | Hash Key | Range Key | Projection | Entity |
 |-----------|------|----------|-----------|------------|--------|
-| SubIndex | GSI | `sub` | (none) | `INCLUDE` (user_id, username) | User |
+| SubIndex | GSI | `sub` | (none) | `INCLUDE` (user_id, username) | User (unused — was for Cognito) |
 | UsernameIndex | GSI | `username_lower` | (none) | `KEYS_ONLY` | User |
 | NameSearch | GSI | `gsiname_pk` | `gsiname_sk` | `KEYS_ONLY` | User, File |
 | UploadDateIndex | GSI | `gsidate_pk` | `gsidate_sk` | `KEYS_ONLY` | File |
 | DownloadCountIndex | GSI | `gsidown_pk` | `gsidown_sk` | `KEYS_ONLY` | File |
 
-### SubIndex - Lookup user by Cognito sub
+### EmailIndex - Lookup user by email
 
 | Key | Type | Value |
 |-----|------|-------|
-| `sub` | HASH | Cognito `sub` value |
+| `PK` | HASH | `EMAIL#<email>` |
+| `SK` | HASH | `METADATA` |
 
-Returns enough data to identify the user without a second fetch.
+Returns the userId, then a second `GetItem` fetches the profile.
 
-| sub | SK | user_id | username |
-|-----|-----|---------|----------|
-| abc123 | USER#PROFILE | uuid-1 | joaosilva |
+| PK | SK | userId |
+|------|-----|---------|
+| EMAIL#user@example.com | METADATA | uuid-1 |
 
 ### UsernameIndex - Lookup user by username
 
@@ -153,7 +174,7 @@ File names are sharded by first character hex (`NAME#FILE#6a`, `NAME#FILE#72`) t
 | # | Query | Index | Key Condition |
 |---|-------|-------|---------------|
 | 1 | Get user by username | UsernameIndex | `username_lower = {lower(username)}` → `get_item(PK=USER#{user_id}, SK=USER#PROFILE)` |
-| 2 | Get user by Cognito sub | SubIndex | `sub = {sub}` |
+| 2 | Get user by email | -- | `GetItem(PK=EMAIL#<email>, SK=METADATA)` → `GetItem(PK=USER#{user_id}, SK=PROFILE)` |
 | 3 | List user's files | -- | `query(PK=USER#{user_id}, begins_with(SK, FILE#))` |
 | 4 | List all users | NameSearch | `gsiname_pk = NAME#USER` |
 | 5 | Search users by username | NameSearch | `gsiname_pk = NAME#USER, begins_with(gsiname_sk, {prefix})` |
@@ -169,7 +190,7 @@ File names are sharded by first character hex (`NAME#FILE#6a`, `NAME#FILE#72`) t
 
 Each username must be globally unique. Enforced via a **reservation item** + **DynamoDB TransactWriteItems** at account creation.
 
-The username is set once during signup (after Cognito confirmation). It can be changed later, but the new value must also be globally unique.
+The username is set once during signup. It can be changed later, but the new value must also be globally unique.
 
 #### Reservation Item
 
@@ -181,14 +202,17 @@ If this item exists, the username is taken. Its existence alone enforces the res
 
 #### Write Flow
 
-**Creating account with username (after Cognito signup):**
+**Creating account with username (after signup):**
 ```
 TransactWriteItems([
   Put{ PK: "USERNAME#joaosilva", SK: "RESERVED" }
     → Condition: attribute_not_exists(PK)
-  Put{ PK: "USER#uuid-1", SK: "USER#PROFILE",
-       user_id: "uuid-1", sub: "abc123",
-       username: "joaosilva", username_lower: "joaosilva", ... }
+  Put{ PK: "USER#uuid-1", SK: "PROFILE",
+       user_id: "uuid-1",
+       username: "joaosilva", username_lower: "joaosilva",
+       email: "user@example.com", passwordHash: "$2a$10$...", ... }
+  Put{ PK: "EMAIL#user@example.com", SK: "METADATA",
+       userId: "uuid-1" }
 ])
 ```
 
@@ -198,7 +222,7 @@ TransactWriteItems([
   Delete{ PK: "USERNAME#joaosilva", SK: "RESERVED" }
   Put{ PK: "USERNAME#mariacosta", SK: "RESERVED" }
     → Condition: attribute_not_exists(PK)
-  Update{ PK: "USER#uuid-1", SK: "USER#PROFILE",
+  Update{ PK: "USER#uuid-1", SK: "PROFILE",
           SET username = "mariacosta", username_lower = "mariacosta" }
 ])
 ```
@@ -212,7 +236,7 @@ Single `UpdateItem` on `USER#{user_id}` - no transaction needed.
 
 | Operation | Transaction | Condition |
 |-----------|-------------|-----------|
-| Create account | 2-item Put | Reservation: `attribute_not_exists(PK)` |
+| Create account | 3-item Put (user + email + username reservation) | Reservation: `attribute_not_exists(PK)` |
 | Change username | Delete old reservation + Put new reservation + Update user profile | New reservation: `attribute_not_exists(PK)` |
 | Update profile | Single UpdateItem | -- |
 

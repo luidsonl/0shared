@@ -216,6 +216,33 @@ Terminal 3:     (optional) aws dynamodb    (interact directly with DynamoDB)
                 put-item / scan / etc.
 ```
 
+### Testing Auth Locally
+
+```bash
+# Signup
+sam local invoke AuthFunction -e events/event-signup.json --env-vars env.json
+
+# Login (copy the returned token)
+sam local invoke AuthFunction -e events/event-login.json --env-vars env.json
+
+# /auth/me with the token
+# Edit events/event-me.json with the actual token, then:
+sam local invoke AuthFunction -e events/event-me.json --env-vars env.json
+
+# Logout
+sam local invoke AuthFunction -e events/event-logout.json --env-vars env.json
+```
+
+Or run via local API Gateway:
+```bash
+sam local start-api --env-vars env.json --host 0.0.0.0
+
+# In another terminal:
+curl -X POST http://localhost:3000/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","username":"user","password":"secret123"}'
+```
+
 ---
 
 ## Security Considerations
@@ -235,8 +262,8 @@ Terminal 3:     (optional) aws dynamodb    (interact directly with DynamoDB)
 ### API Gateway
 
 - REST API is deployed with public endpoint
-- No additional auth is configured (for demo purposes)
-- In production, add Lambda authorizer, Cognito, or API key
+- Auth routes (`/auth/*`) are publicly accessible
+- Protected routes validate session via Bearer token lookup in DynamoDB
 
 ---
 
@@ -278,9 +305,11 @@ Terminal 3:     (optional) aws dynamodb    (interact directly with DynamoDB)
     │   └── health-event.json  # Sample invocation event
     └── src/
         ├── lib/               # Shared clients (DynamoDB, S3)
+        ├── middleware/        # Auth middleware (session validation)
         └── handlers/          # Lambda handlers
             ├── package.json   # "type": "module" for ESM
-            └── health.mjs     # GET /health handler
+            ├── health.mjs     # GET /health handler
+            └── auth.mjs       # POST /auth/*, GET /auth/me
 ```
 
 ---
@@ -327,7 +356,26 @@ Dependencies flow forward, so destroy must happen in reverse.
 
 ### Adding Authentication
 
-1. Create a Cognito User Pool in Terraform (`terraform/aws-app/resources/modules/auth/main.tf`)
-2. Export the User Pool ID and App Client ID
-3. Add a Cognito authorizer in SAM (`template.yaml`)
-4. Configure CloudFront to forward auth headers to API Gateway
+Auth is implemented as a stateful session system using DynamoDB.
+
+**Data model (single-table):**
+
+| PK | SK | Purpose |
+|----|----|---------|
+| `USER#<id>` | `PROFILE` | User data (email, username, passwordHash) |
+| `EMAIL#<email>` | `METADATA` | Reverse lookup: email → userId |
+| `SESSION#<token>` | `SESSION#<token>` | Session with expiry (7 days) |
+| `USER#<id>` | `SESSION#<token>` | User's active sessions list |
+
+**Endpoints:**
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/auth/signup` | No | Create account (email + username + password) |
+| POST | `/auth/login` | No | Sign in, returns Bearer token |
+| POST | `/auth/logout` | Bearer | Destroy session |
+| GET | `/auth/me` | Bearer | Get current user profile |
+
+**Flow:** Login → bcrypt verify → create session in DynamoDB → return `{ token }`. Each protected call reads `SESSION#<token>` to validate. Logout deletes both `SESSION#<token>` records.
+
+**Dependencies:** `bcryptjs` (pure-JS bcrypt), `@aws-sdk/lib-dynamodb` (DocumentClient).

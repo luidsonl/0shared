@@ -1,0 +1,13 @@
+{
+  "httpMethod": "POST",
+  "path": "/auth/signup",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "queryStringParameters": null,
+  "pathParameters": null,
+  "body": "{\"email\":\"test@example.com\",\"username\":\"testuser\",\"password\":\"secret123\"}",
+  "requestContext": {
+    "stage": "Prod"
+  }
+}
