@@ -36,6 +36,72 @@ This document describes the architecture, tooling decisions, and integration pat
 
 ---
 
+## Resource Name Centralization
+
+### Problem
+
+Resource names (DynamoDB table, S3 bucket, SAM stack) are scattered across `samconfig.toml`, `env.json`, `clean.sh`, and Terraform. A typo or mismatch between them causes runtime failures.
+
+### Derivation Chain
+
+```
+terraform.tfvars                          sam-app/resources.env (final values)
+────────────────────                     ─────────────────────────────
+namespace=luidsonl                        │
+project_name=0shared                      │
+environment=""                            │
+table_suffix=""                           ├── DYNAMODB_TABLE = 0shared
+files_bucket_suffix="-files"              ├── FILES_BUCKET   = luidsonl-0shared-files
+front_bucket_suffix="-front"              │
+oac_name_suffix="-s3-oac"                 │
+                                          │
+  ┌─ locals.tf ──────────────────┐        │
+  │  env_dash  = ""              │        │
+  │  env_under = ""              │        │
+  │  name_prefix = "0shared"     │        │
+  │  full_prefix = "luidsonl-0shared"│     │
+  └──────────────────────────────┘        │
+                                          │
+  ┌─ resources/main.tf ───────────┐       │
+  │  table  = 0shared + "" + ""   │───────┘
+  │  files  = luidsonl-0shared + -files   │
+  │  front  = luidsonl-0shared + -front   │
+  └──────────────────────────────┘        │
+```
+
+**Naming formula:**
+
+| Resource | Formula | Example |
+|----------|---------|---------|
+| DynamoDB table | `{project_name}{env_under}{table_suffix}` | `0shared` |
+| Files S3 bucket | `{namespace}-{project_name}{env_dash}{files_bucket_suffix}` | `luidsonl-0shared-files` |
+| Frontend S3 bucket | `{namespace}-{project_name}{env_dash}{front_bucket_suffix}` | `luidsonl-0shared-front` |
+| CloudFront OAC | `{project_name}{env_dash}{oac_name_suffix}` | `0shared-s3-oac` |
+| SAM stack | `{project_name}-backend` (hardcoded in `samconfig.toml`) | `app-0shared-backend` |
+
+### How each file consumes the names
+
+| File | Consumption |
+|------|-----------|
+| `terraform/aws-app/terraform.tfvars` | Defines `namespace`, `project_name`, `environment`, and the four `*_suffix` variables |
+| `terraform/aws-app/resources/main.tf` | Constructs full names from `locals` + `var.*_suffix` |
+| `sam-app/resources.env` | Documents the final derived names (must match Terraform output) |
+| `sam-app/samconfig.toml` | Hardcoded values with `# Must match resources.env` comments |
+| `sam-app/env.json` | Hardcoded values (keep in sync manually — JSON has no variables) |
+| `sam-app/scripts/clean.sh` | `source resources.env` for defaults; CLI flags override |
+| `sam-app/Makefile` | `include resources.env` — targets inherit names as env vars |
+
+### Changing resource names (new environment)
+
+1. Edit `terraform/aws-app/terraform.tfvars` with new prefix/suffix values
+2. Run `terraform apply` to create the new infrastructure
+3. Copy the resulting names to `sam-app/resources.env`
+4. Update `sam-app/samconfig.toml` parameter_overrides to match
+5. Update `sam-app/env.json` to match
+6. Run `make deploy`
+
+---
+
 ## Tooling Strategy
 
 ### Terraform — Infrastructure as Code
@@ -162,8 +228,10 @@ cd terraform/aws-bootstrap && terraform init && terraform apply
 cd terraform/aws-app && terraform init && terraform apply
 
 # Step 3 — Lambda + API Gateway
-cd sam-app && sam build && sam deploy
+cd sam-app && make deploy
 ```
+
+> `make deploy` runs `sam build && sam deploy`, reading resource names from `resources.env` (via `samconfig.toml`, which references the env file in comments).
 
 ---
 
@@ -225,30 +293,32 @@ Tests rodam contra a API real (local ou AWS) via HTTP, sem mocks.
 
 ```bash
 # Terminal 1 — inicia a API local
-cd sam-app && sam local start-api --env-vars env.json --host 0.0.0.0
+cd sam-app && make start-api
 
 # Terminal 2 — roda os 12 testes (health + auth)
-cd sam-app && npm test
+cd sam-app && make test
 
 # Opcional — limpa os dados gerados pelos testes
-cd sam-app && ./scripts/clean.sh
+cd sam-app && make clean
 ```
 
 Contra a AWS (após deploy):
 
 ```bash
+make test-aws
+# ou manualmente:
 API_ENDPOINT=https://d2u9723h1u8hu2.cloudfront.net/api npm test
 ```
 
-A variável `API_ENDPOINT` (default `http://127.0.0.1:3000`) é lida em `tests/integration/helpers.mjs`.
+A variável `API_ENDPOINT` (default `http://127.0.0.1:3000`) é lida em `tests/integration/helpers.mjs`. O `Makefile` injeta via env var.
 
 ### Clean Script
 
-Limpa DynamoDB + S3. Útil entre execuções de teste.
+Limpa DynamoDB + S3. Útil entre execuções de teste. Lê defaults do `resources.env`.
 
 ```bash
-cd sam-app && ./scripts/clean.sh          # limpa tudo
-cd sam-app && ./scripts/clean.sh --dry-run  # só mostra o que seria apagado
+cd sam-app && make clean                  # limpa tudo (usa resources.env)
+cd sam-app && ./scripts/clean.sh --dry-run # só mostra o que seria apagado
 ```
 
 ---
@@ -286,6 +356,8 @@ cd sam-app && ./scripts/clean.sh --dry-run  # só mostra o que seria apagado
 └── sam-app/                  # Lambda + API Gateway
     ├── template.yaml         # SAM template (functions, API, policies)
     ├── samconfig.toml        # SAM config (stack name, parameter overrides)
+    ├── resources.env         # Central resource names (source of truth)
+    ├── Makefile              # Convenience targets (deploy, test, clean)
     ├── package.json          # Test runner (mocha + chai)
     ├── env.json               # Local environment variables
     ├── scripts/

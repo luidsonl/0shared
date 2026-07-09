@@ -24,3 +24,28 @@ variable "owner" {
   description = "Owner tag value"
   default     = null
 }
+
+# ── Resource name suffixes ──────────────────────
+variable "table_suffix" {
+  type        = string
+  description = "Suffix appended to the DynamoDB table name (e.g. '_test')"
+  default     = ""
+}
+
+variable "files_bucket_suffix" {
+  type        = string
+  description = "Suffix appended to the files S3 bucket name (e.g. '-storage')"
+  default     = "-files"
+}
+
+variable "front_bucket_suffix" {
+  type        = string
+  description = "Suffix appended to the frontend S3 bucket name (e.g. '-www')"
+  default     = "-front"
+}
+
+variable "oac_name_suffix" {
+  type        = string
+  description = "Suffix appended to the CloudFront OAC name (e.g. '-oac')"
+  default     = "-s3-oac"
+}

@@ -5,3 +5,11 @@ variable "name_prefix" {
 variable "full_prefix" {
   type = string
 }
+
+variable "front_bucket_suffix" {
+  type = string
+}
+
+variable "oac_suffix" {
+  type = string
+}

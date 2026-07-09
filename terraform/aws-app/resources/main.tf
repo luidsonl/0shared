@@ -3,19 +3,21 @@
 # ---------------------------------------------------------------------------
 module "database" {
   source     = "./modules/database"
-  table_name = "${var.project_name}${local.env_under}"
+  table_name = "${var.project_name}${local.env_under}${var.table_suffix}"
 }
 
 module "files" {
   source      = "./modules/files"
-  bucket_name = "${local.full_prefix}-files"
+  bucket_name = "${local.full_prefix}${var.files_bucket_suffix}"
 }
 
 module "frontend" {
   source = "./modules/frontend"
 
-  name_prefix = local.name_prefix
-  full_prefix = local.full_prefix
+  name_prefix         = local.name_prefix
+  full_prefix         = local.full_prefix
+  front_bucket_suffix = var.front_bucket_suffix
+  oac_suffix          = var.oac_name_suffix
 }
 
 # ---------------------------------------------------------------------------

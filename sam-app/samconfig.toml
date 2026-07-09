@@ -3,6 +3,7 @@
 version = 0.1
 
 [default.global.parameters]
+# Values must match resources.env (reference: STACK_NAME)
 stack_name = "app-0shared-backend"
 
 [default.build.parameters]
@@ -15,8 +16,10 @@ lint = true
 [default.deploy.parameters]
 capabilities = "CAPABILITY_IAM"
 confirm_changeset = false
+# Must match resources.env (reference: STACK_NAME)
 s3_prefix = "app-0shared-backend"
 resolve_s3 = true
+# Values must match resources.env (reference: DYNAMODB_TABLE, FILES_BUCKET)
 parameter_overrides = 'DynamoDBTableName="0shared" FilesBucketName="luidsonl-0shared-files"'
 
 [default.package.parameters]

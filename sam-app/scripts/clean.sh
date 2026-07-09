@@ -1,8 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TABLE="${TABLE_NAME:-0shared}"
-BUCKET="${BUCKET_NAME:-luidsonl-0shared-files}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+RESOURCES_ENV="$SCRIPT_DIR/../resources.env"
+
+if [ -f "$RESOURCES_ENV" ]; then
+  set -a; source "$RESOURCES_ENV"; set +a
+fi
+
+TABLE="${TABLE_NAME:-${DYNAMODB_TABLE:-0shared}}"
+BUCKET="${BUCKET_NAME:-${FILES_BUCKET:-luidsonl-0shared-files}}"
 DRY_RUN=false
 
 while [[ $# -gt 0 ]]; do

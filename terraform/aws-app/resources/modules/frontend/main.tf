@@ -1,5 +1,6 @@
 resource "aws_s3_bucket" "this" {
-  bucket = "${var.full_prefix}-front"
+  bucket        = "${var.full_prefix}${var.front_bucket_suffix}"
+  force_destroy = true
 }
 
 resource "aws_s3_bucket_public_access_block" "this" {
@@ -12,7 +13,7 @@ resource "aws_s3_bucket_public_access_block" "this" {
 }
 
 resource "aws_cloudfront_origin_access_control" "this" {
-  name                              = "${var.name_prefix}-s3-oac"
+  name                              = "${var.name_prefix}${var.oac_suffix}"
   description                       = "OAC policy for S3"
   origin_access_control_origin_type = "s3"
   signing_behavior                  = "always"
