@@ -159,19 +159,24 @@ resource "aws_cloudfront_distribution" "main" {
 resource "null_resource" "frontend_deploy" {
   depends_on = [aws_s3_bucket.frontend, aws_cloudfront_distribution.main]
 
+  # Re-runs whenever any frontend source file changes. The actual build is
+  # performed by `make build-frontend` (root Makefile) before `terraform apply`;
+  # here we only upload the pre-built dist/ and invalidate CloudFront.
   triggers = {
-    src_hash = filemd5("${path.module}/../../frontend/package.json")
+    build_hash = sha1(join("|", concat(
+      [for f in fileset("${path.module}/../../frontend/src", "**/*") : filemd5("${path.module}/../../frontend/src/${f}")],
+      [
+        filemd5("${path.module}/../../frontend/package.json"),
+        filemd5("${path.module}/../../frontend/vite.config.ts"),
+      ]
+    )))
   }
 
   provisioner "local-exec" {
     command = <<CMD
       set -e
-      echo "--> Building frontend..."
-      cd "${path.module}/../../frontend"
-      npm install --silent
-      npm run build
       echo "--> Uploading to S3..."
-      aws s3 sync dist/ "s3://${aws_s3_bucket.frontend.bucket}/" --delete
+      aws s3 sync "${path.module}/../../frontend/dist/" "s3://${aws_s3_bucket.frontend.bucket}/" --delete
       echo "--> Invalidating CloudFront..."
       aws cloudfront create-invalidation \
         --distribution-id "${aws_cloudfront_distribution.main.id}" \
