@@ -5,7 +5,7 @@ variable "region" {
 
 variable "namespace" {
   type        = string
-  description = "Unique namespace prefix for globally unique resource names (e.g. S3 buckets, Cognito domains)"
+  description = "Unique namespace prefix for globally unique resource names (e.g. S3 buckets)"
 }
 
 variable "project_name" {

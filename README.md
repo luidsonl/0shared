@@ -26,13 +26,11 @@ The application uses Amazon DynamoDB with a **Single-Table Design** provisioned 
   * **Global Secondary Index (GSI1)**: Keys `GSI1PK` and `GSI1SK` for inverse lookups (e.g., querying all files for a user).
   * **Local Secondary Index (LSI_UploadDate)**: Uses `upload_date` as the range key for chronological sorting and querying.
 
-### 4. Backend & API (Planned: API Gateway & AWS Lambda)
-The backend will be implemented using Python and `boto3`.
-* **Amazon API Gateway**: Routes HTTP/REST requests to Lambda functions.
-* **AWS Lambda**:
-  * **Upload Handler**: Validates requests, creates a DynamoDB record, and returns an S3 Pre-signed URL.
-  * **List/Query Handler**: Fetches user files by querying DynamoDB.
-  * **Download Handler**: Validates permissions and generates S3 Pre-signed GET URLs.
+### 4. Backend & API (AWS SAM)
+The backend is managed separately from Terraform using **AWS SAM**.
+See [`docs/architecture-manual.md`](docs/architecture-manual.md) for details on
+the application layer (Lambda + API Gateway), deployment order, and integration
+patterns.
 
 ---
 

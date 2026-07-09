@@ -14,23 +14,3 @@ output "cloudfront_id" {
   value       = module.resources.cloudfront_id
   description = "CloudFront distribution ID"
 }
-
-output "api_endpoint" {
-  value       = module.resources.api_endpoint
-  description = "API Gateway endpoint URL"
-}
-
-output "cognito_pool_id" {
-  value       = module.resources.cognito_pool_id
-  description = "Cognito User Pool ID"
-}
-
-output "cognito_client_id" {
-  value       = module.resources.cognito_client_id
-  description = "Cognito User Pool Client ID"
-}
-
-output "cognito_domain" {
-  value       = module.resources.cognito_domain
-  description = "Cognito hosted UI domain"
-}
