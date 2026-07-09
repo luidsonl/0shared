@@ -1,0 +1,11 @@
+{
+  "httpMethod": "GET",
+  "path": "/health",
+  "headers": {},
+  "queryStringParameters": null,
+  "pathParameters": null,
+  "body": null,
+  "requestContext": {
+    "stage": "Prod"
+  }
+}

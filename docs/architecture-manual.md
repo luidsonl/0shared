@@ -134,14 +134,32 @@ Terraform apply ──► terraform -chdir=../infra/aws-dev output ──► SAM
 ```
  1. infra/aws-bootstrap/     (one-time S3 state bucket)
  2. infra/aws-dev/           (DynamoDB, S3 buckets, CloudFront, frontend dist)
- 3. sam-app/                 (Lambda + API Gateway — future)
+ 3. sam-app/                 (Lambda + API Gateway)
 ```
 
 Dependencies between steps:
 
 ```
-Step 2 → exports table name → consumed by Step 3
-Step 3 → exports API URL    → consumed by frontend at runtime
+Step 2 → exports table name + bucket name → consumed by Step 3 via --parameter-overrides
+Step 3 → exports API URL                  → consumed by frontend at runtime
+```
+
+### Deploy Commands
+
+```bash
+# Step 1 — one-time
+cd infra/aws-bootstrap && terraform init && terraform apply
+
+# Step 2 — DynamoDB, S3, CloudFront
+cd infra/aws-dev && terraform init && terraform apply
+
+# Step 3 — Lambda + API Gateway
+cd sam-app
+sam build
+sam deploy --guided \
+  --parameter-overrides \
+    DynamoDBTableName=$(terraform -chdir=../infra/aws-dev output -raw table_name) \
+    FilesBucketName=$(terraform -chdir=../infra/aws-dev output -raw files_bucket_name)
 ```
 
 ---
@@ -252,10 +270,17 @@ Terminal 3:     (optional) aws dynamodb    (interact directly with DynamoDB)
 ├── docs/
 │   ├── data-model.md         # DynamoDB schema documentation
 │   └── architecture-manual.md
-└── sam-app/                  # (future) Lambda + API Gateway
-    ├── template.yaml
-    ├── src/handlers/
-    └── ...
+└── sam-app/                  # Lambda + API Gateway
+    ├── template.yaml         # SAM template (functions, API, policies)
+    ├── package.json
+    ├── env.json               # Local environment variables
+    ├── events/
+    │   └── health-event.json  # Sample invocation event
+    └── src/
+        ├── lib/               # Shared clients (DynamoDB, S3)
+        └── handlers/          # Lambda handlers
+            ├── package.json   # "type": "module" for ESM
+            └── health.mjs     # GET /health handler
 ```
 
 ---

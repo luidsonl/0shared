@@ -1,0 +1,52 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+
+Description: "0shared backend — Lambda + API Gateway"
+
+Parameters:
+  DynamoDBTableName:
+    Type: String
+    Description: Name of the DynamoDB table created by Terraform
+  FilesBucketName:
+    Type: String
+    Description: Name of the S3 bucket for user files created by Terraform
+
+Globals:
+  Function:
+    Runtime: nodejs22.x
+    Timeout: 30
+    MemorySize: 128
+    Environment:
+      Variables:
+        DYNAMODB_TABLE: !Ref DynamoDBTableName
+        FILES_BUCKET: !Ref FilesBucketName
+    LoggingConfig:
+      LogFormat: JSON
+      ApplicationLogLevel: INFO
+      SystemLogLevel: WARN
+
+Resources:
+  HealthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/handlers/
+      Handler: health.lambdaHandler
+      Events:
+        HealthApi:
+          Type: Api
+          Properties:
+            Path: /health
+            Method: GET
+      Policies:
+        - CloudWatchPutMetricPolicy: {}
+        - DynamoDBReadPolicy:
+            TableName: !Ref DynamoDBTableName
+        - S3ReadPolicy:
+            BucketName: !Ref FilesBucketName
+
+Outputs:
+  ApiEndpoint:
+    Description: "API Gateway endpoint URL (Prod stage)"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/Prod"
+    Export:
+      Name: !Sub "${AWS::StackName}-ApiEndpoint"
