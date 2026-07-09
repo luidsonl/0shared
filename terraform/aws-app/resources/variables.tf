@@ -20,13 +20,3 @@ variable "files_bucket_suffix" {
   type    = string
   default = "-files"
 }
-
-variable "front_bucket_suffix" {
-  type    = string
-  default = "-front"
-}
-
-variable "oac_name_suffix" {
-  type    = string
-  default = "-s3-oac"
-}

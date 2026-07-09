@@ -11,9 +11,9 @@ describe("Auth API", () => {
   let token;
   let userId;
 
-  describe("POST /auth/signup", () => {
+  describe("POST /api/auth/signup", () => {
     it("cria conta com dados validos", async () => {
-      const res = await api("POST", "/auth/signup", user);
+      const res = await api("POST", "/api/auth/signup", user);
       expect(res.status).to.equal(200);
       expect(res.body.userId).to.be.a("string");
       expect(res.body.email).to.equal(user.email);
@@ -22,13 +22,13 @@ describe("Auth API", () => {
     });
 
     it("rejeita email duplicado com 409", async () => {
-      const res = await api("POST", "/auth/signup", user);
+      const res = await api("POST", "/api/auth/signup", user);
       expect(res.status).to.equal(409);
       expect(res.body.error).to.equal("Email already registered");
     });
 
     it("rejeita senha curta com 400", async () => {
-      const res = await api("POST", "/auth/signup", {
+      const res = await api("POST", "/api/auth/signup", {
         email: `other-${id}@test.com`,
         username: `other-${id}`,
         password: "1234567",
@@ -37,14 +37,14 @@ describe("Auth API", () => {
     });
 
     it("rejeita campos faltando com 400", async () => {
-      const res = await api("POST", "/auth/signup", { email: "x@y.com" });
+      const res = await api("POST", "/api/auth/signup", { email: "x@y.com" });
       expect(res.status).to.equal(400);
     });
   });
 
-  describe("POST /auth/login", () => {
+  describe("POST /api/auth/login", () => {
     it("retorna token com credenciais validas", async () => {
-      const res = await api("POST", "/auth/login", {
+      const res = await api("POST", "/api/auth/login", {
         email: user.email,
         password: user.password,
       });
@@ -56,7 +56,7 @@ describe("Auth API", () => {
     });
 
     it("rejeita senha errada com 401", async () => {
-      const res = await api("POST", "/auth/login", {
+      const res = await api("POST", "/api/auth/login", {
         email: user.email,
         password: "wrongpassword",
       });
@@ -64,7 +64,7 @@ describe("Auth API", () => {
     });
 
     it("rejeita email inexistente com 401", async () => {
-      const res = await api("POST", "/auth/login", {
+      const res = await api("POST", "/api/auth/login", {
         email: "nao-existe@test.com",
         password: "Test1234",
       });
@@ -72,9 +72,9 @@ describe("Auth API", () => {
     });
   });
 
-  describe("GET /auth/me", () => {
+  describe("GET /api/auth/me", () => {
     it("retorna perfil com token valido", async () => {
-      const res = await api("GET", "/auth/me", null, token);
+      const res = await api("GET", "/api/auth/me", null, token);
       expect(res.status).to.equal(200);
       expect(res.body.userId).to.equal(userId);
       expect(res.body.email).to.equal(user.email);
@@ -82,19 +82,19 @@ describe("Auth API", () => {
     });
 
     it("rejeita sem token com 401", async () => {
-      const res = await api("GET", "/auth/me");
+      const res = await api("GET", "/api/auth/me");
       expect(res.status).to.equal(401);
     });
   });
 
-  describe("POST /auth/logout", () => {
+  describe("POST /api/auth/logout", () => {
     it("destroi sessao ativa", async () => {
-      const res = await api("POST", "/auth/logout", null, token);
+      const res = await api("POST", "/api/auth/logout", null, token);
       expect(res.status).to.equal(200);
     });
 
-    it("GET /auth/me rejeita token apos logout", async () => {
-      const res = await api("GET", "/auth/me", null, token);
+    it("GET /api/auth/me rejeita token apos logout", async () => {
+      const res = await api("GET", "/api/auth/me", null, token);
       expect(res.status).to.equal(401);
     });
   });

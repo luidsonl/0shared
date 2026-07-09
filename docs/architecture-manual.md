@@ -1,8 +1,10 @@
-# Architecture Manual — Serverless CRUD with Terraform + SAM
+# Architecture Manual — Serverless File Sharing with Terraform + SAM
 
 ## Overview
 
-This document describes the architecture, tooling decisions, and integration patterns used in this project. It serves as a reference for building similar serverless applications with a clear separation between infrastructure (Terraform) and application (AWS SAM) layers.
+This document describes the architecture, tooling decisions, and integration patterns used in **0shared**. It serves as a reference for building similar serverless applications with a clear separation between infrastructure (Terraform) and application (AWS SAM) layers.
+
+The backend API is served under the `/api` path prefix so that a single CloudFront distribution can serve both the static frontend (`/*`) and the API (`/api/*`) from one domain, without CORS.
 
 ---
 
@@ -13,92 +15,50 @@ This document describes the architecture, tooling decisions, and integration pat
                         ┌──────────┐
                         │  CDN     │
                         └────┬─────┘
-                    ┌────────┴────────┐
-                    │                 │
-                    ▼                 ▼
-              ┌──────────┐    ┌──────────────┐
-              │ S3       │    │ API Gateway  │
-              │ (static) │    │ (REST API)   │
-              └──────────┘    └──────┬───────┘
-                                     │
-                                     ▼
-                              ┌──────────────┐
-                              │ Lambda       │
-                              │ (Node.js 22) │
-                              └──────┬───────┘
-                                     │
-                                     ▼
-                              ┌──────────────┐
-                              │ DynamoDB     │
-                              │ (Terraform)  │
-                              └──────────────┘
+            ┌────────────────┴────────────────┐
+            │                                  │
+            ▼                                  ▼
+      ┌──────────┐                    ┌──────────────┐
+      │ S3       │                    │ API Gateway  │
+      │ (static) │                    │ (REST API)   │
+      └──────────┘                    └──────┬───────┘
+                                             │
+                                             ▼
+                                      ┌──────────────┐
+                                      │ Lambda       │
+                                      │ (Node.js 22) │
+                                      └──────┬───────┘
+                                             │
+                                             ▼
+                                      ┌──────────────┐
+                                      │ DynamoDB     │
+                                      │ (Terraform)  │
+                                      └──────────────┘
 ```
 
 ---
 
-## Resource Name Centralization
-
-### Problem
-
-Resource names (DynamoDB table, S3 bucket, SAM stack) are scattered across `samconfig.toml`, `env.json`, `clean.sh`, and Terraform. A typo or mismatch between them causes runtime failures.
-
-### Derivation Chain
+## Project Structure
 
 ```
-terraform.tfvars                          sam-app/resources.env (final values)
-────────────────────                     ─────────────────────────────
-namespace=luidsonl                        │
-project_name=0shared                      │
-environment=""                            │
-table_suffix=""                           ├── DYNAMODB_TABLE = 0shared
-files_bucket_suffix="-files"              ├── FILES_BUCKET   = luidsonl-0shared-files
-front_bucket_suffix="-front"              │
-oac_name_suffix="-s3-oac"                 │
-                                          │
-  ┌─ locals.tf ──────────────────┐        │
-  │  env_dash  = ""              │        │
-  │  env_under = ""              │        │
-  │  name_prefix = "0shared"     │        │
-  │  full_prefix = "luidsonl-0shared"│     │
-  └──────────────────────────────┘        │
-                                          │
-  ┌─ resources/main.tf ───────────┐       │
-  │  table  = 0shared + "" + ""   │───────┘
-  │  files  = luidsonl-0shared + -files   │
-  │  front  = luidsonl-0shared + -front   │
-  └──────────────────────────────┘        │
+├── terraform/
+│   ├── aws-bootstrap/     # S3 bucket for Terraform state (one-time)
+│   ├── aws-app/           # DynamoDB table + S3 files bucket (stateful infra)
+│   └── aws-frontend/      # S3 static bucket + CloudFront + OAC + deploy
+├── frontend/              # React + Vite SPA (src/App.tsx, vite.config.ts)
+├── docs/
+│   ├── architecture-manual.md
+│   └── dynamodb-schema.md
+└── sam-app/               # Lambda + API Gateway (stateless compute)
+    ├── template.yaml      # SAM template (functions, API, policies, exports)
+    ├── samconfig.toml     # SAM config (stack name, parameter overrides)
+    ├── resources.env      # Central resource names (source of truth)
+    ├── Makefile           # Convenience targets (deploy, test, clean)
+    ├── env.json           # Local environment variables
+    ├── scripts/clean.sh    # Clean DynamoDB + S3
+    ├── tests/integration/ # HTTP integration tests (mocha + chai)
+    └── src/handlers/      # Lambda code (Node.js ESM)
 ```
-
-**Naming formula:**
-
-| Resource | Formula | Example |
-|----------|---------|---------|
-| DynamoDB table | `{project_name}{env_under}{table_suffix}` | `0shared` |
-| Files S3 bucket | `{namespace}-{project_name}{env_dash}{files_bucket_suffix}` | `luidsonl-0shared-files` |
-| Frontend S3 bucket | `{namespace}-{project_name}{env_dash}{front_bucket_suffix}` | `luidsonl-0shared-front` |
-| CloudFront OAC | `{project_name}{env_dash}{oac_name_suffix}` | `0shared-s3-oac` |
-| SAM stack | `{project_name}-backend` (hardcoded in `samconfig.toml`) | `app-0shared-backend` |
-
-### How each file consumes the names
-
-| File | Consumption |
-|------|-----------|
-| `terraform/aws-app/terraform.tfvars` | Defines `namespace`, `project_name`, `environment`, and the four `*_suffix` variables |
-| `terraform/aws-app/resources/main.tf` | Constructs full names from `locals` + `var.*_suffix` |
-| `sam-app/resources.env` | Documents the final derived names (must match Terraform output) |
-| `sam-app/samconfig.toml` | Hardcoded values with `# Must match resources.env` comments |
-| `sam-app/env.json` | Hardcoded values (keep in sync manually — JSON has no variables) |
-| `sam-app/scripts/clean.sh` | `source resources.env` for defaults; CLI flags override |
-| `sam-app/Makefile` | `include resources.env` — targets inherit names as env vars |
-
-### Changing resource names (new environment)
-
-1. Edit `terraform/aws-app/terraform.tfvars` with new prefix/suffix values
-2. Run `terraform apply` to create the new infrastructure
-3. Copy the resulting names to `sam-app/resources.env`
-4. Update `sam-app/samconfig.toml` parameter_overrides to match
-5. Update `sam-app/env.json` to match
-6. Run `make deploy`
 
 ---
 
@@ -109,9 +69,10 @@ oac_name_suffix="-s3-oac"                 │
 Terraform manages all **stateful, long-lived infrastructure**:
 
 | Resource | Responsibility |
-|---|---|---|
+|---|---|
 | `terraform/aws-bootstrap/` | S3 bucket for Terraform state |
-| `terraform/aws-app/` | DynamoDB tables, S3 buckets (files + frontend), CloudFront distribution, OAC |
+| `terraform/aws-app/` | DynamoDB table, S3 files bucket (CORS for direct uploads) |
+| `terraform/aws-frontend/` | S3 static bucket, CloudFront distribution, OAC, frontend deploy |
 
 **Why Terraform for these?**
 - DynamoDB tables are stateful — deleting and recreating them loses data.
@@ -136,29 +97,70 @@ SAM manages **stateless, ephemeral compute**:
 
 ---
 
+## Resource Name Centralization
+
+### Derivation Chain
+
+```
+terraform/aws-app/terraform.tfvars     sam-app/resources.env (final values)
+─────────────────────────────         ─────────────────────────────
+namespace=luidsonl                      │
+project_name=0shared                    │
+environment=""                          │
+table_suffix=""                         ├── DYNAMODB_TABLE = 0shared
+files_bucket_suffix="-files"            ├── FILES_BUCKET   = luidsonl-0shared-files
+                                        │
+terraform/aws-frontend/terraform.tfvars │
+front_bucket_suffix="-front"            ├── S3 frontend   = luidsonl-0shared-front
+oac_name_suffix="-s3-oac"               ├── OAC           = 0shared-s3-oac
+```
+
+**Naming formula:**
+
+| Resource | Formula | Example |
+|----------|---------|---------|
+| DynamoDB table | `{project_name}{env_under}{table_suffix}` | `0shared` |
+| Files S3 bucket | `{namespace}-{project_name}{env_dash}{files_bucket_suffix}` | `luidsonl-0shared-files` |
+| Frontend S3 bucket | `{namespace}-{project_name}{env_dash}{front_bucket_suffix}` | `luidsonl-0shared-front` |
+| CloudFront OAC | `{project_name}{env_dash}{oac_name_suffix}` | `0shared-s3-oac` |
+| SAM stack | `app-0shared-backend` (hardcoded in `samconfig.toml`) | `app-0shared-backend` |
+
+### How each file consumes the names
+
+| File | Consumption |
+|------|-----------|
+| `terraform/aws-app/terraform.tfvars` | Defines `namespace`, `project_name`, `environment`, `table_suffix`, `files_bucket_suffix` |
+| `terraform/aws-frontend/terraform.tfvars` | Defines frontend `namespace`, `project_name`, `environment`, `front_bucket_suffix`, `oac_name_suffix` |
+| `sam-app/resources.env` | Documents the final derived names (must match Terraform output) |
+| `sam-app/samconfig.toml` | Hardcoded values with `# Must match resources.env` comments |
+| `sam-app/env.json` | Hardcoded values for local `sam local start-api` |
+| `sam-app/Makefile` | `include resources.env` — targets inherit names as env vars |
+
+---
+
 ## Integration Between Terraform and SAM
 
 ### The Problem
 
-Terraform and SAM deploy independently. Terraform doesn't know about SAM resources and vice versa. But they need to share information — for example, Lambda functions need to know the DynamoDB table name.
+Terraform and SAM deploy independently. Terraform doesn't know about SAM resources and vice versa. But they need to share information — for example, Lambda functions need to know the DynamoDB table name, and the frontend's CloudFront distribution needs to know the API Gateway URL.
 
-### Solution: CloudFormation Exports + Data Sources
+### Solution 1: CloudFormation Exports → Terraform Data Sources (SAM → Terraform)
 
-SAM exports resource values as CloudFormation exports:
+SAM exports the API endpoint as a CloudFormation export:
 
 ```yaml
 # sam-app/template.yaml
 Outputs:
   ApiEndpoint:
-    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/Prod"
     Export:
       Name: sam-app-ApiEndpoint
 ```
 
-Terraform reads the export using a data source in the frontend module:
+Terraform reads the export in the frontend layer:
 
 ```hcl
-# terraform/aws-app/resources/modules/frontend/main.tf
+# terraform/aws-frontend/main.tf
 data "aws_cloudformation_export" "api_url" {
   name = "sam-app-ApiEndpoint"
 }
@@ -167,10 +169,10 @@ data "aws_cloudformation_export" "api_url" {
 **Flow:**
 
 ```
-SAM deploy ──► CloudFormation Export ──► Terraform data source ──► CloudFront origin
+SAM deploy ──► CloudFormation Export ──► Terraform data source ──► CloudFront /api/* origin
 ```
 
-### Passing Parameters Down
+### Solution 2: SAM Parameters (Terraform → SAM)
 
 For values flowing the other direction (Terraform → SAM), use SAM parameters:
 
@@ -179,20 +181,16 @@ For values flowing the other direction (Terraform → SAM), use SAM parameters:
 Parameters:
   DynamoDBTableName:
     Type: String
+  FilesBucketName:
+    Type: String
 ```
 
 ```bash
-# Deploy command (dev)
+# Deploy command
 sam build && sam deploy
 ```
 
-**Flow:**
-
-```
-samconfig.toml ──► SAM --parameter-overrides ──► Lambda env vars
-```
-
-Os valores de `DynamoDBTableName` e `FilesBucketName` ficam no `sam-app/samconfig.toml`. Para outro ambiente, sobrescreva na linha de comando:
+The values live in `sam-app/samconfig.toml` (`parameter_overrides`) and are kept in sync with `resources.env`. For another environment, override on the command line:
 
 ```bash
 sam deploy --parameter-overrides \
@@ -205,17 +203,19 @@ sam deploy --parameter-overrides \
 ## Deployment Order
 
 ```
- 1. terraform/aws-bootstrap/     (one-time S3 state bucket)
- 2. terraform/aws-app/           (DynamoDB, S3 buckets, CloudFront, frontend dist)
- 3. sam-app/                 (Lambda + API Gateway)
+ 1. terraform/aws-bootstrap/   (one-time S3 state bucket, lock table)
+ 2. terraform/aws-app/        (DynamoDB table + S3 files bucket)
+ 3. sam-app/                  (Lambda + API Gateway, exports ApiEndpoint)
+ 4. terraform/aws-frontend/   (S3 + CloudFront + frontend build & upload)
 ```
 
 Dependencies between steps:
 
 ```
-Step 2 → DynamoDB table + S3 buckets created (names defined in Terraform)
+Step 2 → table/bucket names defined in Terraform
 Step 3 → reads table/bucket names from samconfig.toml, deploys Lambda + API Gateway
-Step 3 → exports API URL → consumed by frontend at runtime
+Step 3 → exports API URL (sam-app-ApiEndpoint) → consumed by Step 4
+Step 4 → reads the export, builds the SPA, uploads to S3, invalidates CloudFront
 ```
 
 ### Deploy Commands
@@ -224,25 +224,29 @@ Step 3 → exports API URL → consumed by frontend at runtime
 # Step 1 — one-time (S3 state bucket)
 cd terraform/aws-bootstrap && terraform init && terraform apply
 
-# Step 2 — DynamoDB, S3, CloudFront
+# Step 2 — DynamoDB table + S3 files bucket
 cd terraform/aws-app && terraform init && terraform apply
 
-# Step 3 — Lambda + API Gateway
-cd sam-app && make deploy
+# Step 3 — Lambda + API Gateway (exports sam-app-ApiEndpoint)
+cd sam-app && sam build && sam deploy
+
+# Step 4 — S3 + CloudFront + frontend build/upload
+cd terraform/aws-frontend && terraform init && terraform apply
 ```
 
-> `make deploy` runs `sam build && sam deploy`, reading resource names from `resources.env` (via `samconfig.toml`, which references the env file in comments).
+> `sam deploy` reads resource names from `samconfig.toml`, whose `parameter_overrides`
+> must match `resources.env`. The `aws-frontend` apply blocks until the SAM export exists.
 
 ---
 
 ## Data Flow (Production)
 
 ```
-User ──► https://cloudfront.net/
+User ──► https://<cloudfront>.cloudfront.net/
                 │
-                ├── /api/items/* ──► CloudFront origin "api-gateway"
-                │                       │
-                │                       └── /Prod/api/items ──► API Gateway ──► Lambda ──► DynamoDB
+                ├── /api/* ──► CloudFront origin "api-gateway"
+                │                 │
+                │                 └── /Prod/api/* ──► API Gateway ──► Lambda ──► DynamoDB
                 │
                 └── /* (default) ──► CloudFront origin "s3-frontend"
                                         │
@@ -258,8 +262,12 @@ User ──► https://cloudfront.net/
 Vite runs a dev server at `http://localhost:5173` and proxies `/api/*` to the SAM local API:
 
 ```ts
-// vite.config.ts
-server: { proxy: { '/api': 'http://localhost:3000' } }
+// frontend/vite.config.ts
+server: {
+  proxy: {
+    '/api': 'http://localhost:3000'
+  }
+}
 ```
 
 SAM local API runs at `http://localhost:3000` and invokes Lambda functions locally:
@@ -270,11 +278,13 @@ sam local start-api --env-vars env.json --host 0.0.0.0
 
 ### Production
 
-The frontend is built with `npm run build` and uploaded to S3. CloudFront serves:
+The frontend is built with `npm run build` and uploaded to S3 by the `null_resource.frontend_deploy`
+inside `terraform/aws-frontend`. CloudFront serves:
 - Static files (`/*`) from the S3 origin
 - API requests (`/api/*`) from the API Gateway origin
 
-The frontend always uses **relative paths** (`/api/items`). In dev, Vite proxies them. In production, CloudFront routes them. No environment-specific configuration is needed in the frontend code.
+The frontend always uses **relative paths** (`/api/health`, `/api/auth/login`). In dev, Vite proxies them.
+In production, CloudFront routes them. No environment-specific configuration is needed in the frontend code.
 
 ---
 
@@ -287,45 +297,48 @@ Terminal 3:     (optional) aws dynamodb    (interact directly with DynamoDB)
                 put-item / scan / etc.
 ```
 
-### Integration Tests
+---
 
-Tests rodam contra a API real (local ou AWS) via HTTP, sem mocks.
+## Integration Tests
+
+Tests run against the real API (local or AWS) over HTTP, without mocks.
 
 ```bash
-# Terminal 1 — inicia a API local
+# Terminal 1 — start the local API
 cd sam-app && make start-api
 
-# Terminal 2 — roda os 12 testes (health + auth)
+# Terminal 2 — run the integration tests (health + auth)
 cd sam-app && make test
 
-# Opcional — limpa os dados gerados pelos testes
+# Optional — clean data generated by tests
 cd sam-app && make clean
 ```
 
-Contra a AWS (após deploy):
+Against AWS (after deploy):
 
 ```bash
 make test-aws
-# ou manualmente:
-API_ENDPOINT=https://d2u9723h1u8hu2.cloudfront.net/api npm test
+# or manually (note the /api suffix on the CloudFront domain):
+API_ENDPOINT=https://<cloudfront>.cloudfront.net/api npm test
 ```
 
-A variável `API_ENDPOINT` (default `http://127.0.0.1:3000`) é lida em `tests/integration/helpers.mjs`. O `Makefile` injeta via env var.
+The `API_ENDPOINT` variable (default `http://127.0.0.1:3000`) is read in
+`tests/integration/helpers.mjs`. The Makefile injects it via an env var.
 
 ### Clean Script
 
-Limpa DynamoDB + S3. Útil entre execuções de teste. Lê defaults do `resources.env`.
+Cleans DynamoDB + S3. Useful between test runs. Reads defaults from `resources.env`.
 
 ```bash
-cd sam-app && make clean                  # limpa tudo (usa resources.env)
-cd sam-app && ./scripts/clean.sh --dry-run # só mostra o que seria apagado
+cd sam-app && make clean                   # clean everything (uses resources.env)
+cd sam-app && ./scripts/clean.sh --dry-run # show what would be deleted
 ```
 
 ---
 
 ## Security Considerations
 
-### S3 Bucket
+### S3 Bucket (frontend)
 
 - Public access blocked (`block_public_acls`, `block_public_policy`, etc.)
 - Only CloudFront can read objects (via Origin Access Control + bucket policy)
@@ -335,49 +348,13 @@ cd sam-app && ./scripts/clean.sh --dry-run # só mostra o que seria apagado
 
 - OAC (Origin Access Control) is used instead of legacy OAI
 - Viewer protocol policy: `redirect-to-https`
-- API requests are forwarded with `CachingDisabled` policy (no caching of dynamic data)
+- API requests (`/api/*`) use the `CachingDisabled` cache policy (no caching of dynamic data)
 
 ### API Gateway
 
-- REST API is deployed with public endpoint
-- Auth routes (`/auth/*`) are publicly accessible
-- Protected routes validate session via Bearer token lookup in DynamoDB
-
----
-
-## Project Structure
-
-```
-├── terraform/
-│   ├── aws-bootstrap/        # S3 bucket for Terraform state
-│   └── aws-app/              # DynamoDB, S3, CloudFront
-├── frontend/                 # React + Vite
-├── docs/                     # Schema + architecture docs
-└── sam-app/                  # Lambda + API Gateway
-    ├── template.yaml         # SAM template (functions, API, policies)
-    ├── samconfig.toml        # SAM config (stack name, parameter overrides)
-    ├── resources.env         # Central resource names (source of truth)
-    ├── Makefile              # Convenience targets (deploy, test, clean)
-    ├── package.json          # Test runner (mocha + chai)
-    ├── env.json               # Local environment variables
-    ├── scripts/
-    │   └── clean.sh           # Clean DynamoDB + S3
-    ├── tests/
-    │   └── integration/
-    │       ├── helpers.mjs    # Fetch wrapper (Bearer token, JSON parse)
-    │       ├── health.test.mjs
-    │       └── auth.test.mjs  # 11 tests covering full auth flow
-    └── src/
-        └── handlers/          # Lambda code (deployed to AWS)
-            ├── package.json   # Lambda dependencies
-            ├── .npmignore     # Excludes tests from deployment
-            ├── health.mjs     # GET /health
-            ├── auth.mjs       # POST /auth/*, GET /auth/me
-            ├── lib/
-            │   └── dynamo-client.mjs  # DocumentClient helpers
-            └── middleware/
-                └── auth.mjs   # Session validation (Bearer → DynamoDB lookup)
-```
+- REST API is deployed with a public endpoint
+- Auth routes (`/api/auth/*`) are publicly accessible
+- Protected routes validate the session via a Bearer token lookup in DynamoDB
 
 ---
 
@@ -387,19 +364,20 @@ cd sam-app && ./scripts/clean.sh --dry-run # só mostra o que seria apagado
 |---|---|
 | **REST API over HTTP API** | `sam local start-api` has better support for REST API (`Type: Api`) |
 | **CloudFront over direct API** | Single domain for frontend + API, no CORS needed |
-| **Relative API paths** (`/api/items`) | Same code works in dev (Vite proxy) and prod (CloudFront) |
-| **Single Terraform config** | Bootstrap (one-time) lives in `terraform/aws-bootstrap/`; all app infra lives together in `terraform/aws-app/` |
+| **`/api` path prefix** | Same code works in dev (Vite proxy) and prod (CloudFront) |
+| **Separate `aws-frontend` module** | Frontend infra (S3 + CloudFront) is decoupled from stateful app infra |
 | **CloudFormation Export** | Cleanest way to pass values from SAM to Terraform without SSM costs |
-| **`aws_s3_object` for deploy** | Frontend dist uploads + CloudFront invalidation in a single `terraform apply` |
+| **`null_resource` for deploy** | Frontend build + upload + invalidation in a single `terraform apply` |
 
 ---
 
 ## Clean Up Order
 
 ```bash
-cd terraform/aws-app && terraform destroy   # CloudFront + S3 + DynamoDB + frontend files
-sam delete                              # Lambda + API Gateway
-cd terraform/aws-bootstrap && terraform destroy  # State bucket (optional)
+terraform/aws-frontend destroy   # CloudFront + S3 + frontend files
+sam delete                       # Lambda + API Gateway
+terraform/aws-app destroy        # DynamoDB table + files bucket
+terraform/aws-bootstrap destroy  # State bucket (optional)
 ```
 
 Dependencies flow forward, so destroy must happen in reverse.
@@ -411,8 +389,8 @@ Dependencies flow forward, so destroy must happen in reverse.
 ### Adding a New Lambda
 
 1. Add a new handler in `sam-app/src/handlers/`
-2. Add a new resource in `sam-app/template.yaml` with `Type: AWS::Serverless::Function` and an `Api` event
-3. Add a new cache behavior in `terraform/aws-app/resources/modules/frontend/main.tf` → `ordered_cache_behavior` if needed
+2. Add a new resource in `sam-app/template.yaml` with `Type: AWS::Serverless::Function` and an `Api` event (path under `/api/*`)
+3. If a new top-level path is needed, add an `ordered_cache_behavior` in `terraform/aws-frontend/main.tf`
 
 ### Adding a New DynamoDB Table
 
@@ -425,23 +403,15 @@ Dependencies flow forward, so destroy must happen in reverse.
 
 Auth is implemented as a stateful session system using DynamoDB.
 
-**Data model (single-table):**
-
-| PK | SK | Purpose |
-|----|----|---------|
-| `USER#<id>` | `PROFILE` | User data (email, username, passwordHash) |
-| `EMAIL#<email>` | `METADATA` | Reverse lookup: email → userId |
-| `SESSION#<token>` | `SESSION#<token>` | Session with expiry (7 days) |
-| `USER#<id>` | `SESSION#<token>` | User's active sessions list |
-
-**Endpoints:**
+**Endpoints (all under `/api`):**
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| POST | `/auth/signup` | No | Create account (email + username + password) |
-| POST | `/auth/login` | No | Sign in, returns Bearer token |
-| POST | `/auth/logout` | Bearer | Destroy session |
-| GET | `/auth/me` | Bearer | Get current user profile |
+| POST | `/api/auth/signup` | No | Create account (email + username + password) |
+| POST | `/api/auth/login` | No | Sign in, returns Bearer token |
+| POST | `/api/auth/logout` | Bearer | Destroy session |
+| GET | `/api/auth/me` | Bearer | Get current user profile |
+| GET | `/api/health` | No | Health check (DynamoDB + S3) |
 
 **Flow:** Login → bcrypt verify → create session in DynamoDB → return `{ token }`. Each protected call reads `SESSION#<token>` to validate. Logout deletes both `SESSION#<token>` records.
 

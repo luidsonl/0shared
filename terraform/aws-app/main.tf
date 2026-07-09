@@ -6,6 +6,4 @@ module "resources" {
   environment         = var.environment
   table_suffix        = var.table_suffix
   files_bucket_suffix = var.files_bucket_suffix
-  front_bucket_suffix = var.front_bucket_suffix
-  oac_name_suffix     = var.oac_name_suffix
 }

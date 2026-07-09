@@ -9,9 +9,9 @@
 The system uses a serverless architecture for storage, routing, and backend processing.
 
 ### 1. Frontend Hosting (S3 & CloudFront)
-The frontend is a static website.
+The frontend is a React + Vite single-page application served as static files.
 * **Frontend S3 Bucket** (`luidsonl-0shared-front`): Hosts static assets. Direct public access is blocked.
-* **CloudFront Distribution**: Acts as a CDN to cache and serve the frontend application.
+* **CloudFront Distribution**: Acts as a CDN to cache and serve the frontend application, and to route `/api/*` to API Gateway.
 * **Security (OAC)**: Communication between CloudFront and the S3 bucket is secured using **Origin Access Control (OAC)**.
 
 ### 2. User File Storage (S3)
@@ -28,6 +28,8 @@ The application uses Amazon DynamoDB with a **Single-Table Design** provisioned 
 
 ### 4. Backend & API (AWS SAM)
 The backend is managed separately from Terraform using **AWS SAM**.
+All API routes are served under the `/api` path prefix (e.g. `/api/auth/login`,
+`/api/health`) so CloudFront can route them to API Gateway from the same domain.
 See [`docs/architecture-manual.md`](docs/architecture-manual.md) for details on
 the application layer (Lambda + API Gateway), deployment order, and integration
 patterns.
@@ -51,10 +53,31 @@ terraform init
 terraform apply
 ```
 
-#### 2. Deploy Infrastructure (Dev)
+#### 2. Deploy Stateful Infrastructure (Dev)
+
+Provisions the DynamoDB table and the S3 files bucket.
 
 ```bash
 cd terraform/aws-app
+terraform init
+terraform apply
+```
+
+#### 3. Deploy Backend (Lambda + API Gateway)
+
+```bash
+cd sam-app
+sam build
+sam deploy
+```
+
+#### 4. Deploy Frontend (S3 + CloudFront)
+
+Builds the React app, uploads it to S3, and creates the CloudFront distribution.
+This step reads the API endpoint exported by the SAM stack.
+
+```bash
+cd terraform/aws-frontend
 terraform init
 terraform apply
 ```

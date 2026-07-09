@@ -35,7 +35,7 @@ Resources:
         HealthApi:
           Type: Api
           Properties:
-            Path: /health
+            Path: /api/health
             Method: GET
       Policies:
         - CloudWatchPutMetricPolicy: {}
@@ -53,22 +53,22 @@ Resources:
         Signup:
           Type: Api
           Properties:
-            Path: /auth/signup
+            Path: /api/auth/signup
             Method: POST
         Login:
           Type: Api
           Properties:
-            Path: /auth/login
+            Path: /api/auth/login
             Method: POST
         Logout:
           Type: Api
           Properties:
-            Path: /auth/logout
+            Path: /api/auth/logout
             Method: POST
         Me:
           Type: Api
           Properties:
-            Path: /auth/me
+            Path: /api/auth/me
             Method: GET
       Policies:
         - CloudWatchPutMetricPolicy: {}
@@ -80,4 +80,4 @@ Outputs:
     Description: "API Gateway endpoint URL (Prod stage)"
     Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/Prod"
     Export:
-      Name: !Sub "${AWS::StackName}-ApiEndpoint"
+      Name: sam-app-ApiEndpoint
