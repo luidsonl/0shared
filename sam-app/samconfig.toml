@@ -3,7 +3,7 @@
 version = 0.1
 
 [default.global.parameters]
-stack_name = "0shared-backend"
+stack_name = "app-0shared-backend"
 
 [default.build.parameters]
 cached = true
