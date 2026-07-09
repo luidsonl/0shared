@@ -40,9 +40,7 @@ The backend will be implemented using Python and `boto3`.
 
 ### AWS
 
-The Terraform infrastructure (`infra/aws`) provisions all resources directly in AWS.
-Ministack/LocalStack is no longer used for development due to infrastructure
-limitations — even though Ministack is excellent for studying purposes.
+The Terraform infrastructure provisions all resources directly in AWS.
 
 #### 1. Bootstrap (State Backend)
 
@@ -55,15 +53,12 @@ terraform init
 terraform apply
 ```
 
-#### 2. Deploy Main Infrastructure
+#### 2. Deploy Infrastructure (Dev)
 
 ```bash
-cd infra/aws
+cd infra/aws-dev
 terraform init
 terraform apply
 ```
 
-### Ministack (Study Only)
 
-The old LocalStack-based setup lives in `infra/ministack`. Not recommended for
-active development — kept for reference.
