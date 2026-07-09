@@ -46,7 +46,7 @@ Creates the S3 bucket for Terraform state management.
 Run this once per AWS account.
 
 ```bash
-cd infra/aws-bootstrap
+cd terraform/aws-bootstrap
 terraform init
 terraform apply
 ```
@@ -54,7 +54,7 @@ terraform apply
 #### 2. Deploy Infrastructure (Dev)
 
 ```bash
-cd infra/aws-dev
+cd terraform/aws-app
 terraform init
 terraform apply
 ```
