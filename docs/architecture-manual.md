@@ -116,15 +116,22 @@ Parameters:
 ```
 
 ```bash
-# Deploy command
-sam deploy --parameter-overrides \
-  DynamoDBTableName=$(terraform -chdir=../terraform/aws-app output -raw dynamodb_table_name)
+# Deploy command (dev)
+sam build && sam deploy
 ```
 
 **Flow:**
 
 ```
-Terraform apply ──► terraform -chdir=../terraform/aws-app output ──► SAM --parameter-overrides ──► Lambda env vars
+samconfig.toml ──► SAM --parameter-overrides ──► Lambda env vars
+```
+
+Os valores de `DynamoDBTableName` e `FilesBucketName` ficam no `sam-app/samconfig.toml`. Para outro ambiente, sobrescreva na linha de comando:
+
+```bash
+sam deploy --parameter-overrides \
+  DynamoDBTableName=staging_table \
+  FilesBucketName=staging-bucket
 ```
 
 ---
@@ -140,26 +147,22 @@ Terraform apply ──► terraform -chdir=../terraform/aws-app output ──►
 Dependencies between steps:
 
 ```
-Step 2 → exports table name + bucket name → consumed by Step 3 via --parameter-overrides
-Step 3 → exports API URL                  → consumed by frontend at runtime
+Step 2 → DynamoDB table + S3 buckets created (names defined in Terraform)
+Step 3 → reads table/bucket names from samconfig.toml, deploys Lambda + API Gateway
+Step 3 → exports API URL → consumed by frontend at runtime
 ```
 
 ### Deploy Commands
 
 ```bash
-# Step 1 — one-time
+# Step 1 — one-time (S3 state bucket)
 cd terraform/aws-bootstrap && terraform init && terraform apply
 
 # Step 2 — DynamoDB, S3, CloudFront
 cd terraform/aws-app && terraform init && terraform apply
 
 # Step 3 — Lambda + API Gateway
-cd sam-app
-sam build
-sam deploy --guided \
-  --parameter-overrides \
-    DynamoDBTableName=$(terraform -chdir=../terraform/aws-app output -raw table_name) \
-    FilesBucketName=$(terraform -chdir=../terraform/aws-app output -raw files_bucket_name)
+cd sam-app && sam build && sam deploy
 ```
 
 ---
@@ -216,31 +219,36 @@ Terminal 3:     (optional) aws dynamodb    (interact directly with DynamoDB)
                 put-item / scan / etc.
 ```
 
-### Testing Auth Locally
+### Integration Tests
+
+Tests rodam contra a API real (local ou AWS) via HTTP, sem mocks.
 
 ```bash
-# Signup
-sam local invoke AuthFunction -e events/event-signup.json --env-vars env.json
+# Terminal 1 — inicia a API local
+cd sam-app && sam local start-api --env-vars env.json --host 0.0.0.0
 
-# Login (copy the returned token)
-sam local invoke AuthFunction -e events/event-login.json --env-vars env.json
+# Terminal 2 — roda os 12 testes (health + auth)
+cd sam-app && npm test
 
-# /auth/me with the token
-# Edit events/event-me.json with the actual token, then:
-sam local invoke AuthFunction -e events/event-me.json --env-vars env.json
-
-# Logout
-sam local invoke AuthFunction -e events/event-logout.json --env-vars env.json
+# Opcional — limpa os dados gerados pelos testes
+cd sam-app && ./scripts/clean.sh
 ```
 
-Or run via local API Gateway:
-```bash
-sam local start-api --env-vars env.json --host 0.0.0.0
+Contra a AWS (após deploy):
 
-# In another terminal:
-curl -X POST http://localhost:3000/auth/signup \
-  -H "Content-Type: application/json" \
-  -d '{"email":"user@example.com","username":"user","password":"secret123"}'
+```bash
+API_ENDPOINT=https://d2u9723h1u8hu2.cloudfront.net/api npm test
+```
+
+A variável `API_ENDPOINT` (default `http://127.0.0.1:3000`) é lida em `tests/integration/helpers.mjs`.
+
+### Clean Script
+
+Limpa DynamoDB + S3. Útil entre execuções de teste.
+
+```bash
+cd sam-app && ./scripts/clean.sh          # limpa tudo
+cd sam-app && ./scripts/clean.sh --dry-run  # só mostra o que seria apagado
 ```
 
 ---
@@ -270,46 +278,33 @@ curl -X POST http://localhost:3000/auth/signup \
 ## Project Structure
 
 ```
-├── infra/
-│   ├── aws-bootstrap/      # S3 bucket for Terraform state
-│   │   ├── main.tf
-│   │   ├── outputs.tf
-│   │   └── providers.tf
-│   └── aws-dev/            # Main infrastructure
-│       ├── resources/
-│       │   ├── main.tf         # Module wiring + frontend dist upload
-│       │   ├── outputs.tf
-│       │   ├── locals.tf
-│       │   ├── variables.tf
-│       │   └── modules/
-│       │       ├── database/   # DynamoDB table
-│       │       ├── files/      # S3 bucket for user files
-│       │       └── frontend/   # S3 bucket + CloudFront + OAC
-│       ├── backend.tf
-│       ├── providers.tf
-│       ├── variables.tf
-│       ├── outputs.tf
-│       └── terraform.tfvars
-├── frontend/
-│   ├── src/                  # React SPA
-│   ├── vite.config.ts        # Dev proxy /api → :3000
-│   └── package.json
-├── docs/
-│   ├── data-model.md         # DynamoDB schema documentation
-│   └── architecture-manual.md
+├── terraform/
+│   ├── aws-bootstrap/        # S3 bucket for Terraform state
+│   └── aws-app/              # DynamoDB, S3, CloudFront
+├── frontend/                 # React + Vite
+├── docs/                     # Schema + architecture docs
 └── sam-app/                  # Lambda + API Gateway
     ├── template.yaml         # SAM template (functions, API, policies)
-    ├── package.json
+    ├── samconfig.toml        # SAM config (stack name, parameter overrides)
+    ├── package.json          # Test runner (mocha + chai)
     ├── env.json               # Local environment variables
-    ├── events/
-    │   └── health-event.json  # Sample invocation event
+    ├── scripts/
+    │   └── clean.sh           # Clean DynamoDB + S3
+    ├── tests/
+    │   └── integration/
+    │       ├── helpers.mjs    # Fetch wrapper (Bearer token, JSON parse)
+    │       ├── health.test.mjs
+    │       └── auth.test.mjs  # 11 tests covering full auth flow
     └── src/
-        ├── lib/               # Shared clients (DynamoDB, S3)
-        ├── middleware/        # Auth middleware (session validation)
-        └── handlers/          # Lambda handlers
-            ├── package.json   # "type": "module" for ESM
-            ├── health.mjs     # GET /health handler
-            └── auth.mjs       # POST /auth/*, GET /auth/me
+        └── handlers/          # Lambda code (deployed to AWS)
+            ├── package.json   # Lambda dependencies
+            ├── .npmignore     # Excludes tests from deployment
+            ├── health.mjs     # GET /health
+            ├── auth.mjs       # POST /auth/*, GET /auth/me
+            ├── lib/
+            │   └── dynamo-client.mjs  # DocumentClient helpers
+            └── middleware/
+                └── auth.mjs   # Session validation (Bearer → DynamoDB lookup)
 ```
 
 ---
