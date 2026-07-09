@@ -25,10 +25,10 @@ export async function lambdaHandler(event) {
     const method = event.httpMethod;
     const path = event.path;
 
-    if (method === "POST" && path === "/auth/signup") return handleSignup(event);
-    if (method === "POST" && path === "/auth/login") return handleLogin(event);
-    if (method === "POST" && path === "/auth/logout") return handleLogout(event);
-    if (method === "GET" && path === "/auth/me") return handleMe(event);
+    if (method === "POST" && path === "/api/auth/signup") return handleSignup(event);
+    if (method === "POST" && path === "/api/auth/login") return handleLogin(event);
+    if (method === "POST" && path === "/api/auth/logout") return handleLogout(event);
+    if (method === "GET" && path === "/api/auth/me") return handleMe(event);
 
     return json(404, { error: "Not found" });
   } catch (err) {

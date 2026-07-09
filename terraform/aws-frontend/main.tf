@@ -5,7 +5,7 @@ data "aws_caller_identity" "current" {}
 
 # The API URL is exported by SAM after the backend stack is deployed.
 data "aws_cloudformation_export" "api_url" {
-  name = "sam-app-ApiEndpoint"
+  name = "app-0shared-backend-ApiEndpoint"
 }
 
 # ---------------------------------------------------------------------------
