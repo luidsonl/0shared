@@ -4,12 +4,16 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 RESOURCES_ENV="$SCRIPT_DIR/../resources.env"
 
-if [ -f "$RESOURCES_ENV" ]; then
-  set -a; source "$RESOURCES_ENV"; set +a
+if [ ! -f "$RESOURCES_ENV" ]; then
+  echo "ERROR: resources.env not found at $RESOURCES_ENV" >&2
+  echo "This file is required. See sam-app/resources.env." >&2
+  exit 1
 fi
 
-TABLE="${TABLE_NAME:-${DYNAMODB_TABLE:-0shared}}"
-BUCKET="${BUCKET_NAME:-${FILES_BUCKET:-luidsonl-0shared-files}}"
+set -a; source "$RESOURCES_ENV"; set +a
+
+TABLE="${TABLE_NAME:-${DYNAMODB_TABLE:?'DYNAMODB_TABLE not set in resources.env'}}"
+BUCKET="${BUCKET_NAME:-${FILES_BUCKET:?'FILES_BUCKET not set in resources.env'}}"
 DRY_RUN=false
 
 while [[ $# -gt 0 ]]; do

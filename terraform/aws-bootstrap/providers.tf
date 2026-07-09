@@ -1,12 +1,23 @@
+terraform {
+  required_version = ">= 1.5"
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}
+
 provider "aws" {
-  region = "us-east-1"
+  region = var.region
 
   default_tags {
     tags = {
-      "env"     = "dev"
-      "project" = "0shared"
+      "env"     = var.environment
+      "project" = var.project_name
       "manager" = "terraform"
-      "owner"   = "luidsonl"
+      "owner"   = var.owner != null ? var.owner : "unknown"
     }
   }
 }

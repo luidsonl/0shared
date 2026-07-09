@@ -1,5 +1,10 @@
 resource "aws_s3_bucket" "terraform_state" {
-  bucket = "luidsonl-0shared-terraform-state"
+  bucket = var.state_bucket_name
+  region = var.region
+  tags = {
+    project_name = var.project_name
+    owner        = var.owner
+  }
 }
 
 resource "aws_s3_bucket_versioning" "terraform_state" {

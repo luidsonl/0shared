@@ -4,6 +4,10 @@ resource "aws_dynamodb_table" "this" {
   hash_key     = "PK"
   range_key    = "SK"
 
+  lifecycle {
+    prevent_destroy = true
+  }
+
   attribute {
     name = "PK"
     type = "S"
@@ -49,62 +53,33 @@ resource "aws_dynamodb_table" "this" {
     name               = "SubIndex"
     projection_type    = "INCLUDE"
     non_key_attributes = ["user_id", "username"]
-
-    key_schema {
-      attribute_name = "sub"
-      key_type       = "HASH"
-    }
+    hash_key           = "sub"
   }
 
   global_secondary_index {
-    name            = "UsernameIndex"
+    name     = "UsernameIndex"
     projection_type = "KEYS_ONLY"
-
-    key_schema {
-      attribute_name = "username_lower"
-      key_type       = "HASH"
-    }
+    hash_key = "username_lower"
   }
 
   global_secondary_index {
-    name            = "NameSearch"
+    name     = "NameSearch"
     projection_type = "KEYS_ONLY"
-
-    key_schema {
-      attribute_name = "gsiname_pk"
-      key_type       = "HASH"
-    }
-    key_schema {
-      attribute_name = "gsiname_sk"
-      key_type       = "RANGE"
-    }
+    hash_key = "gsiname_pk"
+    range_key = "gsiname_sk"
   }
 
   global_secondary_index {
-    name            = "UploadDateIndex"
+    name     = "UploadDateIndex"
     projection_type = "KEYS_ONLY"
-
-    key_schema {
-      attribute_name = "gsidate_pk"
-      key_type       = "HASH"
-    }
-    key_schema {
-      attribute_name = "gsidate_sk"
-      key_type       = "RANGE"
-    }
+    hash_key = "gsidate_pk"
+    range_key = "gsidate_sk"
   }
 
   global_secondary_index {
-    name            = "DownloadCountIndex"
+    name     = "DownloadCountIndex"
     projection_type = "KEYS_ONLY"
-
-    key_schema {
-      attribute_name = "gsidown_pk"
-      key_type       = "HASH"
-    }
-    key_schema {
-      attribute_name = "gsidown_sk"
-      key_type       = "RANGE"
-    }
+    hash_key = "gsidown_pk"
+    range_key = "gsidown_sk"
   }
 }

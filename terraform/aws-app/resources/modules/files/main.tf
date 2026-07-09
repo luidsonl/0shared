@@ -1,6 +1,10 @@
 resource "aws_s3_bucket" "this" {
   bucket        = var.bucket_name
-  force_destroy = true
+  force_destroy = false
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_s3_bucket_public_access_block" "this" {
@@ -18,7 +22,7 @@ resource "aws_s3_bucket_cors_configuration" "this" {
   cors_rule {
     allowed_headers = ["*"]
     allowed_methods = ["PUT", "POST", "GET", "HEAD"]
-    allowed_origins = ["*"]
+    allowed_origins = var.cors_allowed_origins
     expose_headers  = ["ETag"]
     max_age_seconds = 3000
   }
