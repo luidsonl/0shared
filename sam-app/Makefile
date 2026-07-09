@@ -1,5 +1,5 @@
 RESOURCES := $(shell grep -v '^#' resources.env | grep -v '^$$')
-$(eval $(RESOURCES))
+$(foreach v,$(RESOURCES),$(eval $(v)))
 
 export DYNAMODB_TABLE FILES_BUCKET STACK_NAME
 
