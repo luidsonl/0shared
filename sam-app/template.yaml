@@ -75,6 +75,22 @@ Resources:
         - DynamoDBCrudPolicy:
             TableName: !Ref DynamoDBTableName
 
+  UploadFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/handlers/
+      Handler: upload.lambdaHandler
+      Events:
+        UploadApi:
+          Type: Api
+          Properties:
+            Path: /api/upload
+            Method: POST
+      Policies:
+        - CloudWatchPutMetricPolicy: {}
+        - S3CrudPolicy:
+            BucketName: !Ref FilesBucketName
+
 Outputs:
   ApiEndpoint:
     Description: "API Gateway endpoint URL (Prod stage)"
