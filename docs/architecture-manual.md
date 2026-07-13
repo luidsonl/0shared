@@ -34,6 +34,18 @@ The backend API is served under the `/api` path prefix so that a single CloudFro
                                       │ DynamoDB     │
                                       │ (Terraform)  │
                                       └──────────────┘
+
+Upload flow (presigned URL + S3 event):
+
+  Client ──► POST /api/upload ──► Upload Lambda ──► presigned PUT URL
+                                                            │
+  Client ◄── presigned URL ─────────────────────────────────┘
+      │
+      ▼ (direct PUT to S3)
+  ┌──────────┐
+  │ S3       │
+  │ (files)  │──► S3 Event ──► SQS Queue ──► Registration Lambda ──► DynamoDB
+  └──────────┘                                                      (File entity)
 ```
 
 ---
@@ -43,14 +55,14 @@ The backend API is served under the `/api` path prefix so that a single CloudFro
 ```
 ├── terraform/
 │   ├── aws-bootstrap/     # S3 bucket for Terraform state (one-time)
-│   ├── aws-app/           # DynamoDB table + S3 files bucket (stateful infra)
+│   ├── aws-app/           # DynamoDB table + S3 files bucket + SQS queue + registration Lambda
 │   └── aws-frontend/      # S3 static bucket + CloudFront + OAC + deploy
 ├── frontend/              # React + Vite SPA (src/App.tsx, vite.config.ts)
 ├── docs/
 │   ├── architecture-manual.md
 │   └── dynamodb-schema.md
-└── sam-app/               # Lambda + API Gateway (stateless compute)
-    ├── template.yaml      # SAM template (functions, API, policies, exports)
+└── sam-app/               # API Gateway + API-triggered Lambda (stateless compute)
+    ├── template.yaml      # SAM template (health, auth, upload functions + API)
     ├── samconfig.toml     # SAM config (stack name, parameter overrides)
     ├── resources.env      # Central resource names (source of truth)
     ├── Makefile           # Convenience targets (deploy, test, clean)
@@ -58,6 +70,12 @@ The backend API is served under the `/api` path prefix so that a single CloudFro
     ├── scripts/clean.sh    # Clean DynamoDB + S3
     ├── tests/integration/ # HTTP integration tests (mocha + chai)
     └── src/handlers/      # Lambda code (Node.js ESM)
+        ├── health.mjs     # Health check endpoint (SAM)
+        ├── auth.mjs       # Signup, login, logout, me (SAM)
+        ├── upload.mjs     # Generate presigned upload URL (SAM)
+        ├── register-upload.mjs  # SQS-triggered file registration (Terraform)
+        ├── middleware/     # Request middleware (auth validation)
+        └── lib/           # Shared utilities (DynamoDB client, etc.)
 ```
 
 ---
@@ -71,29 +89,31 @@ Terraform manages all **stateful, long-lived infrastructure**:
 | Resource | Responsibility |
 |---|---|
 | `terraform/aws-bootstrap/` | S3 bucket for Terraform state |
-| `terraform/aws-app/` | DynamoDB table, S3 files bucket (CORS for direct uploads) |
+| `terraform/aws-app/` | DynamoDB table, S3 files bucket (CORS + event notification), SQS upload queue + DLQ, registration Lambda (SQS-triggered), event source mapping (SQS → Lambda) |
 | `terraform/aws-frontend/` | S3 static bucket, CloudFront distribution, OAC, frontend deploy |
 
 **Why Terraform for these?**
 - DynamoDB tables are stateful — deleting and recreating them loses data.
 - S3 buckets and CloudFront are foundational infrastructure.
+- SQS queues, event notifications, and event source mappings are stateful infrastructure.
+- Registration Lambda is not API-triggered — centralizing it with SQS keeps all upload infrastructure together.
 - Terraform's `prevent_destroy` lifecycle protects critical resources.
 - State can be shared across a team via the S3 backend.
 
 ### AWS SAM — Application Layer
 
-SAM manages **stateless, ephemeral compute**:
+SAM manages **stateless, ephemeral compute** (API-triggered Lambdas):
 
 | Resource | Responsibility |
 |---|---|
-| `template.yaml` | Lambda functions, API Gateway (REST API) |
+| `template.yaml` | Lambda functions (health, auth, upload), API Gateway (REST API) |
 | `src/handlers/` | Business logic (Node.js 22 ESM) |
 
 **Why SAM for these?**
 - Lambda functions are code that changes frequently.
 - API Gateway is tightly coupled to Lambda routing.
 - SAM provides a simpler syntax for Lambda + API Gateway than raw CloudFormation.
-- `sam local start-api` enables local testing.
+- `sam local start-api` enables local testing of API-triggered Lambdas.
 
 ---
 
@@ -103,13 +123,13 @@ SAM manages **stateless, ephemeral compute**:
 
 ```
 terraform/aws-app/terraform.tfvars     sam-app/resources.env (final values)
-─────────────────────────────         ─────────────────────────────
+──────────────────────────────         ─────────────────────────────
 namespace=luidsonl                      │
 project_name=0shared                    │
 environment=""                          │
 table_suffix=""                         ├── DYNAMODB_TABLE = 0shared
 files_bucket_suffix="-files"            ├── FILES_BUCKET   = luidsonl-0shared-files
-                                        │
+                                        ├── UPLOAD_QUEUE_URL = <Terraform output>
 terraform/aws-frontend/terraform.tfvars │
 front_bucket_suffix="-front"            ├── S3 frontend   = luidsonl-0shared-front
 oac_name_suffix="-s3-oac"               ├── OAC           = 0shared-s3-oac
@@ -121,6 +141,7 @@ oac_name_suffix="-s3-oac"               ├── OAC           = 0shared-s3-oac
 |----------|---------|---------|
 | DynamoDB table | `{project_name}{env_under}{table_suffix}` | `0shared` |
 | Files S3 bucket | `{namespace}-{project_name}{env_dash}{files_bucket_suffix}` | `luidsonl-0shared-files` |
+| Upload SQS queue | `{project_name}{env_under}{queue_suffix}` | `0shared-upload` |
 | Frontend S3 bucket | `{namespace}-{project_name}{env_dash}{front_bucket_suffix}` | `luidsonl-0shared-front` |
 | CloudFront OAC | `{project_name}{env_dash}{oac_name_suffix}` | `0shared-s3-oac` |
 | SAM stack | `app-0shared-backend` (hardcoded in `samconfig.toml`) | `app-0shared-backend` |
@@ -203,17 +224,18 @@ sam deploy --parameter-overrides \
 ## Deployment Order
 
 ```
- 1. terraform/aws-bootstrap/   (one-time S3 state bucket, lock table)
- 2. terraform/aws-app/        (DynamoDB table + S3 files bucket)
- 3. sam-app/                  (Lambda + API Gateway, exports ApiEndpoint)
+ 1. terraform/aws-bootstrap/   (one-time S3 state bucket)
+ 2. terraform/aws-app/        (DynamoDB + S3 + SQS + registration Lambda + event source mapping)
+ 3. sam-app/                  (API-triggered Lambdas + API Gateway, exports ApiEndpoint)
  4. terraform/aws-frontend/   (S3 + CloudFront + frontend build & upload)
 ```
 
 Dependencies between steps:
 
 ```
-Step 2 → table/bucket names defined in Terraform
-Step 3 → reads table/bucket names from samconfig.toml, deploys Lambda + API Gateway
+Step 2 → all stateful infra: DynamoDB table, S3 files bucket, SQS queue, DLQ,
+         registration Lambda (SQS-triggered), S3 event notification, event source mapping
+Step 3 → reads table/bucket names from samconfig.toml, deploys API-triggered Lambdas
 Step 3 → exports API URL (sam-app-ApiEndpoint) → consumed by Step 4
 Step 4 → reads the export, builds the SPA, uploads to S3, invalidates CloudFront
 ```
@@ -224,10 +246,10 @@ Step 4 → reads the export, builds the SPA, uploads to S3, invalidates CloudFro
 # Step 1 — one-time (S3 state bucket)
 cd terraform/aws-bootstrap && terraform init && terraform apply
 
-# Step 2 — DynamoDB table + S3 files bucket
+# Step 2 — DynamoDB + S3 + SQS + registration Lambda + event source mapping
 cd terraform/aws-app && terraform init && terraform apply
 
-# Step 3 — Lambda + API Gateway (exports sam-app-ApiEndpoint)
+# Step 3 — API-triggered Lambdas + API Gateway (exports sam-app-ApiEndpoint)
 cd sam-app && sam build && sam deploy
 
 # Step 4 — S3 + CloudFront + frontend build/upload
@@ -241,6 +263,8 @@ cd terraform/aws-frontend && terraform init && terraform apply
 
 ## Data Flow (Production)
 
+### API Requests
+
 ```
 User ──► https://<cloudfront>.cloudfront.net/
                 │
@@ -251,6 +275,26 @@ User ──► https://<cloudfront>.cloudfront.net/
                 └── /* (default) ──► CloudFront origin "s3-frontend"
                                         │
                                         └── GET /index.html ──► S3 bucket
+```
+
+### File Upload
+
+```
+1. Client ──► POST /api/upload ──► Upload Lambda (validates auth)
+                                      │
+                                      ├── Generates presigned PUT URL (1 GB max, 5 min TTL)
+                                      │   S3 key: uploads/{user_id}/{file_id}/{filename}
+                                      │
+2. Client ◄── { url, file_id } ◄──────┘
+
+3. Client ──► PUT <presigned_url> ──► S3 (files bucket) ──► ObjectCreated event
+                                                              │
+4. S3 ──► SQS Queue ──► Registration Lambda
+                          │
+                          ├── Parse S3 key → user_id, file_id, filename
+                          ├── S3 HeadObject → content_type, size
+                          ├── DynamoDB GetItem → owner_username
+                          └── DynamoDB PutItem → File entity + GSI attributes
 ```
 
 ---
@@ -344,6 +388,21 @@ cd sam-app && ./scripts/clean.sh --dry-run # show what would be deleted
 - Only CloudFront can read objects (via Origin Access Control + bucket policy)
 - Bucket policy restricts `s3:GetObject` to the specific CloudFront distribution
 
+### S3 Bucket (files)
+
+- Public access blocked (`block_public_acls`, `block_public_policy`, etc.)
+- No public bucket policy — objects are private by default
+- CORS configured for direct browser-to-S3 uploads (PUT, POST, GET, HEAD from `*`)
+- `force_destroy = false` — prevents accidental deletion with objects present
+- `prevent_destroy = true` — Terraform lifecycle protection
+
+### SQS (upload queue)
+
+- Dead-letter queue (DLQ) catches failed registration attempts (14-day retention)
+- Main queue visibility timeout: 4 minutes (allows Lambda to process without re-triggering)
+- Message retention: 14 days
+- Only the Registration Lambda has `sqs:ReceiveMessage` permissions (via SAM event source mapping)
+
 ### CloudFront
 
 - OAC (Origin Access Control) is used instead of legacy OAI
@@ -355,6 +414,14 @@ cd sam-app && ./scripts/clean.sh --dry-run # show what would be deleted
 - REST API is deployed with a public endpoint
 - Auth routes (`/api/auth/*`) are publicly accessible
 - Protected routes validate the session via a Bearer token lookup in DynamoDB
+
+### File Upload
+
+- Presigned URLs expire after 5 minutes (short TTL limits exposure)
+- Presigned URLs enforce 1 GB max file size via `Content-Length-Range` condition
+- S3 key embeds `user_id` and `file_id` — no custom metadata needed
+- Filenames are sanitized (dangerous chars stripped, truncated to 255 chars)
+- Registration Lambda validates the S3 key structure before writing to DynamoDB
 
 ---
 
@@ -368,6 +435,12 @@ cd sam-app && ./scripts/clean.sh --dry-run # show what would be deleted
 | **Separate `aws-frontend` module** | Frontend infra (S3 + CloudFront) is decoupled from stateful app infra |
 | **CloudFormation Export** | Cleanest way to pass values from SAM to Terraform without SSM costs |
 | **`null_resource` for deploy** | Frontend build + upload + invalidation in a single `terraform apply` |
+| **Presigned URL + S3 event** | Lambda doesn't wait for upload — browser PUTs directly to S3, S3 triggers SQS |
+| **SQS over direct S3→Lambda** | SQS provides DLQ, visibility timeout, retry control — S3 event notifications alone are opaque |
+| **Registration Lambda in Terraform** | Not API-triggered; centralizes all upload infrastructure (SQS + Lambda + events) in one layer |
+| **Upload Lambda in SAM** | API-triggered; benefits from `sam local start-api` for local testing |
+| **User ID in S3 key** | Registration Lambda identifies file owner by parsing `uploads/{user_id}/{file_id}/{filename}` |
+| **1 GB presigned URL limit** | S3 rejects oversized uploads at the edge — zero cost for abuse attempts |
 
 ---
 
@@ -375,8 +448,8 @@ cd sam-app && ./scripts/clean.sh --dry-run # show what would be deleted
 
 ```bash
 terraform/aws-frontend destroy   # CloudFront + S3 + frontend files
-sam delete                       # Lambda + API Gateway
-terraform/aws-app destroy        # DynamoDB table + files bucket
+terraform/aws-app destroy        # SQS event source mapping + SQS queue + DLQ + S3 events + DynamoDB + files bucket
+sam delete                       # Lambda functions + API Gateway
 terraform/aws-bootstrap destroy  # State bucket (optional)
 ```
 
@@ -412,7 +485,61 @@ Auth is implemented as a stateful session system using DynamoDB.
 | POST | `/api/auth/logout` | Bearer | Destroy session |
 | GET | `/api/auth/me` | Bearer | Get current user profile |
 | GET | `/api/health` | No | Health check (DynamoDB + S3) |
+| POST | `/api/upload` | Bearer | Get presigned URL for file upload |
 
 **Flow:** Login → bcrypt verify → create session in DynamoDB → return `{ token }`. Each protected call reads `SESSION#<token>` to validate. Logout deletes both `SESSION#<token>` records.
 
 **Dependencies:** `bcryptjs` (pure-JS bcrypt), `@aws-sdk/lib-dynamodb` (DocumentClient).
+
+### Adding File Upload
+
+File upload uses a **presigned URL + S3 event notification** pattern.
+
+**Architecture:**
+
+| Component | Layer | Responsibility |
+|-----------|-------|----------------|
+| Upload Lambda | SAM | Validates auth, generates presigned PUT URL (1 GB max, 5 min TTL) |
+| Registration Lambda | Terraform | Parses S3 event, writes File entity to DynamoDB |
+| S3 files bucket | Terraform | Stores uploaded files, CORS, event notification → SQS |
+| SQS queue + DLQ | Terraform | Buffers S3 events, provides retry/DLQ for failed registrations |
+| Event source mapping | Terraform | Connects SQS queue to registration Lambda |
+
+**Key insight:** All upload infrastructure (SQS, S3 events, registration Lambda, event source mapping) is centralized in Terraform. Only the API-triggered Upload Lambda stays in SAM for local testing.
+
+**S3 key format:** `uploads/{user_id}/{file_id}/{sanitized_filename}`
+
+**Registration Lambda writes the File entity:**
+
+```javascript
+{
+  PK: `USER#${userId}`,
+  SK: `FILE#${fileId}`,
+  file_id: fileId,
+  owner_user_id: userId,
+  owner_username: username,        // from DynamoDB GetItem
+  name: filename,
+  name_lower: filename.toLowerCase(),
+  size: contentLength,             // from S3 HeadObject
+  content_type: contentType,       // from S3 HeadObject
+  upload_date: new Date().toISOString(),
+  download_count: 0,
+  // GSI attributes
+  gsiname_pk: `NAME#FILE#${shard}`,
+  gsiname_sk: `${filename.toLowerCase()}#${fileId}`,
+  gsidate_pk: 'FILE#DATE',
+  gsidate_sk: `${uploadDate}#${fileId}`,
+  gsidown_pk: 'FILE#DOWN',
+  gsidown_sk: `${String(0).padStart(10, '0')}#${fileId}`,
+}
+```
+
+**Adding a new upload endpoint:**
+
+1. Add Upload Lambda definition in `sam-app/template.yaml`
+2. Add Upload Lambda handler in `sam-app/src/handlers/upload.mjs`
+3. Add Registration Lambda in `terraform/aws-app/resources/modules/upload-queue/main.tf`
+4. Add SQS queue + DLQ in `terraform/aws-app/resources/modules/upload-queue/main.tf`
+5. Add S3 event notification in `terraform/aws-app/resources/modules/files/main.tf`
+6. Add event source mapping (SQS → Registration Lambda) in `terraform/aws-app/resources/modules/upload-queue/main.tf`
+7. Update `sam-app/resources.env` with queue name documentation
