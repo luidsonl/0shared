@@ -1,5 +1,17 @@
 import { expect } from "chai";
-import { api, randomId } from "./helpers.mjs";
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import {
+  DynamoDBDocumentClient,
+  GetCommand,
+} from "@aws-sdk/lib-dynamodb";
+import { S3Client, HeadObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { api, randomId, sleep } from "./helpers.mjs";
+
+const TABLE = process.env.DYNAMODB_TABLE || "0shared";
+const BUCKET = process.env.FILES_BUCKET || "luidsonl-0shared-files";
+
+const s3 = new S3Client({});
+const dynamo = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 
 describe("Upload API", () => {
   const id = randomId();
@@ -9,6 +21,7 @@ describe("Upload API", () => {
     password: "Test1234",
   };
   let token;
+  let userId;
 
   before(async () => {
     await api("POST", "/api/auth/signup", user);
@@ -17,6 +30,7 @@ describe("Upload API", () => {
       password: user.password,
     });
     token = login.body.token;
+    userId = login.body.userId;
   });
 
   after(async () => {
@@ -76,6 +90,92 @@ describe("Upload API", () => {
       expect(res.status).to.equal(200);
       const filePart = res.body.key.split("/").pop();
       expect(filePart.length).to.be.at.most(255);
+    });
+  });
+
+  describe("Upload completo (E2E)", () => {
+    let uploadedKey;
+
+    it("faz upload para S3 e confirma objeto existe", async () => {
+      const res = await api("POST", "/api/upload", { filename: "e2e-test.txt" }, token);
+      expect(res.status).to.equal(200);
+      const { url, key, fileId } = res.body;
+      uploadedKey = key;
+
+      const content = "Hello from integration test!";
+      const putRes = await fetch(url, {
+        method: "PUT",
+        headers: { "Content-Type": "text/plain" },
+        body: content,
+      });
+      expect(putRes.status).to.equal(200);
+
+      const head = await s3.send(new HeadObjectCommand({ Bucket: BUCKET, Key: key }));
+      expect(head.ContentType).to.equal("text/plain");
+      expect(head.ContentLength).to.equal(content.length);
+    });
+
+    it("cria referencia no DynamoDB apos processamento SQS", async () => {
+      const res = await api("POST", "/api/upload", { filename: "dynamo-test.txt" }, token);
+      expect(res.status).to.equal(200);
+      const { url, key, fileId } = res.body;
+
+      await fetch(url, {
+        method: "PUT",
+        headers: { "Content-Type": "text/plain" },
+        body: "DynamoDB registration test",
+      });
+
+      let item = null;
+      for (let i = 0; i < 10; i++) {
+        await sleep(1000);
+        const result = await dynamo.send(new GetCommand({
+          TableName: TABLE,
+          Key: { PK: `USER#${res.body.userId}`, SK: `FILE#${fileId}` },
+        }));
+        if (result.Item) { item = result.Item; break; }
+      }
+
+      expect(item).to.not.be.null;
+      expect(item.file_id).to.equal(fileId);
+      expect(item.owner_user_id).to.equal(res.body.userId);
+      expect(item.name).to.equal("dynamo-test.txt");
+      expect(item.content_type).to.equal("text/plain");
+      expect(item.size).to.be.a("number");
+      expect(item.download_count).to.equal(0);
+    });
+
+    after(async () => {
+      if (uploadedKey) {
+        await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: uploadedKey })).catch(() => {});
+      }
+    });
+  });
+
+  describe("Falha no upload", () => {
+    it("rejeita presigned URL invalida", async () => {
+      const fakeUrl = `https://${BUCKET}.s3.amazonaws.com/uploads/fake-key`;
+      const putRes = await fetch(fakeUrl, {
+        method: "PUT",
+        headers: { "Content-Type": "text/plain" },
+        body: "should fail",
+      });
+      expect(putRes.status).to.be.oneOf([403, 400]);
+    });
+
+    it("presigned URL expirada rejeita upload", async () => {
+      const res = await api("POST", "/api/upload", { filename: "expired.txt" }, token);
+      expect(res.status).to.equal(200);
+
+      const expiredUrl = res.body.url.replace("X-Amz-Expires=300", "X-Amz-Expires=1");
+      await sleep(2000);
+
+      const putRes = await fetch(expiredUrl, {
+        method: "PUT",
+        headers: { "Content-Type": "text/plain" },
+        body: "should fail",
+      });
+      expect(putRes.status).to.equal(403);
     });
   });
 });

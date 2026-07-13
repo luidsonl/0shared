@@ -90,6 +90,8 @@ Resources:
         - CloudWatchPutMetricPolicy: {}
         - S3CrudPolicy:
             BucketName: !Ref FilesBucketName
+        - DynamoDBReadPolicy:
+            TableName: !Ref DynamoDBTableName
 
 Outputs:
   ApiEndpoint:
