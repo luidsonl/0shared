@@ -37,3 +37,9 @@ variable "files_bucket_suffix" {
   description = "Suffix appended to the files S3 bucket name (e.g. '-storage')"
   default     = "-files"
 }
+
+variable "queue_suffix" {
+  type        = string
+  description = "Suffix appended to the SQS upload queue name (e.g. '_upload')"
+  default     = "_upload"
+}

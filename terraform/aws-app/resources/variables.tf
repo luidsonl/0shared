@@ -20,3 +20,8 @@ variable "files_bucket_suffix" {
   type    = string
   default = "-files"
 }
+
+variable "queue_suffix" {
+  type    = string
+  default = "-upload"
+}

@@ -14,3 +14,23 @@ output "files_bucket_name" {
   value       = module.resources.files_bucket_name
   description = "S3 bucket name for user files (consumed by SAM)"
 }
+
+output "upload_queue_url" {
+  value       = module.resources.upload_queue_url
+  description = "SQS upload queue URL"
+}
+
+output "upload_queue_arn" {
+  value       = module.resources.upload_queue_arn
+  description = "SQS upload queue ARN"
+}
+
+output "registration_lambda_name" {
+  value       = module.resources.registration_lambda_name
+  description = "Registration Lambda function name"
+}
+
+output "registration_lambda_role_name" {
+  value       = module.resources.registration_lambda_role_name
+  description = "Registration Lambda IAM role name"
+}
