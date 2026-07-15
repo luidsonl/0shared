@@ -33,12 +33,12 @@ ITEMS=$(aws dynamodb scan --table-name "$TABLE" \
   --attributes-to-get PK SK \
   --output json \
   --query "Items[].[PK.S, SK.S]" 2>/dev/null) || {
-  echo "  Tabela nao encontrada. Pulando."
+  echo "  Table not found. Skipping."
   ITEMS="[]"
 }
 
 COUNT=$(echo "$ITEMS" | jq length)
-echo "  Itens encontrados: $COUNT"
+echo "  Items found: $COUNT"
 
 if [ "$COUNT" -gt 0 ] && [ "$DRY_RUN" = false ]; then
   echo "$ITEMS" | jq -c '.[]' | while read -r item; do
@@ -49,9 +49,9 @@ if [ "$COUNT" -gt 0 ] && [ "$DRY_RUN" = false ]; then
       --key "$(jq -n --arg pk "$PK" --arg sk "$SK" '{PK:{S:$pk}, SK:{S:$sk}}')" \
       --output text > /dev/null 2>&1
   done
-  echo "  Limpeza concluida."
+  echo "  Cleanup complete."
 elif [ "$DRY_RUN" = true ]; then
-  echo "  [DRY-RUN] Nada foi deletado."
+  echo "  [DRY-RUN] Nothing was deleted."
 fi
 
 echo ""
@@ -59,13 +59,13 @@ echo "=== S3: $BUCKET ==="
 if aws s3 ls "s3://$BUCKET" > /dev/null 2>&1; then
   if [ "$DRY_RUN" = false ]; then
     aws s3 rm "s3://$BUCKET" --recursive --quiet
-    echo "  Limpeza concluida."
+    echo "  Cleanup complete."
   else
-    echo "  [DRY-RUN] Nada foi deletado."
+    echo "  [DRY-RUN] Nothing was deleted."
   fi
 else
-  echo "  Bucket nao encontrado. Pulando."
+  echo "  Bucket not found. Skipping."
 fi
 
 echo ""
-echo "=== Pronto ==="
+echo "=== Done ==="

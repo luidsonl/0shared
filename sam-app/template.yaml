@@ -10,6 +10,9 @@ Parameters:
   FilesBucketName:
     Type: String
     Description: Name of the S3 bucket for user files created by Terraform
+  InterfaceLambdaName:
+    Type: String
+    Description: Name of the download interface Lambda created by Terraform
 
 Globals:
   Function:
@@ -20,6 +23,7 @@ Globals:
       Variables:
         DYNAMODB_TABLE: !Ref DynamoDBTableName
         FILES_BUCKET: !Ref FilesBucketName
+        INTERFACE_LAMBDA_NAME: !Ref InterfaceLambdaName
     LoggingConfig:
       LogFormat: JSON
       ApplicationLogLevel: INFO
@@ -92,6 +96,26 @@ Resources:
             BucketName: !Ref FilesBucketName
         - DynamoDBReadPolicy:
             TableName: !Ref DynamoDBTableName
+
+  DownloadFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/handlers/
+      Handler: download.lambdaHandler
+      Events:
+        DownloadApi:
+          Type: Api
+          Properties:
+            Path: /api/download/{fileId}
+            Method: GET
+      Policies:
+        - CloudWatchPutMetricPolicy: {}
+        - S3ReadPolicy:
+            BucketName: !Ref FilesBucketName
+        - DynamoDBReadPolicy:
+            TableName: !Ref DynamoDBTableName
+        - LambdaInvokePolicy:
+            FunctionName: !Ref InterfaceLambdaName
 
 Outputs:
   ApiEndpoint:

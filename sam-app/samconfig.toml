@@ -19,8 +19,7 @@ confirm_changeset = false
 # Must match resources.env (reference: STACK_NAME)
 s3_prefix = "app-0shared-backend"
 resolve_s3 = true
-# Values must match resources.env (reference: DYNAMODB_TABLE, FILES_BUCKET)
-parameter_overrides = 'DynamoDBTableName="0shared" FilesBucketName="luidsonl-0shared-files"'
+# Parameters are now passed dynamically via sam deploy --parameter-overrides
 
 [default.package.parameters]
 resolve_s3 = true

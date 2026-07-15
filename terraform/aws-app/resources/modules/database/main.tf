@@ -48,6 +48,10 @@ resource "aws_dynamodb_table" "this" {
     name = "gsidown_sk"
     type = "S"
   }
+  attribute {
+    name = "file_id"
+    type = "S"
+  }
 
   global_secondary_index {
     name               = "SubIndex"
@@ -81,5 +85,11 @@ resource "aws_dynamodb_table" "this" {
     projection_type = "KEYS_ONLY"
     hash_key = "gsidown_pk"
     range_key = "gsidown_sk"
+  }
+
+  global_secondary_index {
+    name            = "FileIdIndex"
+    hash_key        = "file_id"
+    projection_type = "ALL"
   }
 }

@@ -7,7 +7,7 @@ export DYNAMODB_TABLE FILES_BUCKET STACK_NAME
 
 deploy:
 	sam build
-	@out=$$(sam deploy 2>&1); \
+	@out=$$(sam deploy --parameter-overrides DynamoDBTableName=$(DYNAMODB_TABLE) FilesBucketName=$(FILES_BUCKET) InterfaceLambdaName=$(INTERFACE_LAMBDA_NAME) 2>&1); \
 	  if [ $$? -eq 0 ]; then echo "SAM deploy succeeded."; \
 	  elif echo "$$out" | grep -q "No changes to deploy"; then echo "SAM: stack up to date (no changes)."; \
 	  else echo "SAM deploy failed:"; echo "$$out"; exit 1; fi

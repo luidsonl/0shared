@@ -34,3 +34,23 @@ output "registration_lambda_role_name" {
   value       = module.resources.registration_lambda_role_name
   description = "Registration Lambda IAM role name"
 }
+
+output "download_queue_url" {
+  value       = module.resources.download_queue_url
+  description = "SQS download queue URL"
+}
+
+output "download_queue_arn" {
+  value       = module.resources.download_queue_arn
+  description = "SQS download queue ARN"
+}
+
+output "download_counter_lambda_name" {
+  value       = module.resources.download_counter_lambda_name
+  description = "Download counter Lambda function name"
+}
+
+output "download_interface_lambda_name" {
+  value       = module.resources.download_interface_lambda_name
+  description = "Download interface Lambda function name (invoked by SAM)"
+}

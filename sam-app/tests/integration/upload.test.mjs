@@ -38,7 +38,7 @@ describe("Upload API", () => {
   });
 
   describe("POST /api/upload", () => {
-    it("retorna presigned URL com auth valida", async () => {
+    it("returns presigned URL with valid auth", async () => {
       const res = await api("POST", "/api/upload", { filename: "test.pdf" }, token);
       expect(res.status).to.equal(200);
       expect(res.body.url).to.be.a("string");
@@ -50,7 +50,7 @@ describe("Upload API", () => {
       expect(res.body.key).to.include("test.pdf");
     });
 
-    it("retorna presigned URL com content type", async () => {
+    it("returns presigned URL with content type", async () => {
       const res = await api(
         "POST",
         "/api/upload",
@@ -61,7 +61,7 @@ describe("Upload API", () => {
       expect(res.body.url).to.be.a("string").and.include("X-Amz-SignedHeaders");
     });
 
-    it("sanitiza nome do arquivo", async () => {
+    it("sanitizes filename", async () => {
       const res = await api(
         "POST",
         "/api/upload",
@@ -72,19 +72,19 @@ describe("Upload API", () => {
       expect(res.body.key).to.include("my_file_copy_.pdf");
     });
 
-    it("rejeita sem token com 401", async () => {
+    it("rejects without token with 401", async () => {
       const res = await api("POST", "/api/upload", { filename: "test.pdf" });
       expect(res.status).to.equal(401);
       expect(res.body.error).to.equal("Unauthorized");
     });
 
-    it("rejeita sem filename com 400", async () => {
+    it("rejects without filename with 400", async () => {
       const res = await api("POST", "/api/upload", {}, token);
       expect(res.status).to.equal(400);
       expect(res.body.error).to.equal("Missing filename");
     });
 
-    it("trunca filename longo", async () => {
+    it("truncates long filename", async () => {
       const longName = "a".repeat(300) + ".pdf";
       const res = await api("POST", "/api/upload", { filename: longName }, token);
       expect(res.status).to.equal(200);
@@ -93,10 +93,10 @@ describe("Upload API", () => {
     });
   });
 
-  describe("Upload completo (E2E)", () => {
+  describe("Upload complete (E2E)", () => {
     let uploadedKey;
 
-    it("faz upload para S3 e confirma objeto existe", async () => {
+    it("uploads to S3 and confirms object exists", async () => {
       const res = await api("POST", "/api/upload", { filename: "e2e-test.txt" }, token);
       expect(res.status).to.equal(200);
       const { url, key, fileId } = res.body;
@@ -115,7 +115,7 @@ describe("Upload API", () => {
       expect(head.ContentLength).to.equal(content.length);
     });
 
-    it("cria referencia no DynamoDB apos processamento SQS", async () => {
+    it("creates DynamoDB reference after SQS processing", async () => {
       const res = await api("POST", "/api/upload", { filename: "dynamo-test.txt" }, token);
       expect(res.status).to.equal(200);
       const { url, key, fileId } = res.body;
@@ -152,8 +152,8 @@ describe("Upload API", () => {
     });
   });
 
-  describe("Falha no upload", () => {
-    it("rejeita presigned URL invalida", async () => {
+  describe("Upload failure", () => {
+    it("rejects invalid presigned URL", async () => {
       const fakeUrl = `https://${BUCKET}.s3.amazonaws.com/uploads/fake-key`;
       const putRes = await fetch(fakeUrl, {
         method: "PUT",
@@ -163,7 +163,7 @@ describe("Upload API", () => {
       expect(putRes.status).to.be.oneOf([403, 400]);
     });
 
-    it("presigned URL expirada rejeita upload", async () => {
+    it("expired presigned URL rejects upload", async () => {
       const res = await api("POST", "/api/upload", { filename: "expired.txt" }, token);
       expect(res.status).to.equal(200);
 

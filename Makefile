@@ -34,7 +34,8 @@ infra:
 
 # 3. Backend (Lambda + API Gateway)
 backend:
-	$(MAKE) -C sam-app deploy
+	$(eval INTERFACE_LAMBDA_NAME := $(shell cd terraform/aws-app && $(TF) output -raw download_interface_lambda_name))
+	cd sam-app && $(MAKE) deploy INTERFACE_LAMBDA_NAME=$(INTERFACE_LAMBDA_NAME)
 	$(MAKE) redeploy-api
 
 # Workaround for the SAM "empty deployment" race: force a fresh deployment
