@@ -1,8 +1,8 @@
-# Architecture Manual — Serverless File Sharing with Terraform + SAM
+# Architecture — 0shared
 
 ## Overview
 
-This document describes the architecture, tooling decisions, and integration patterns used in **0shared**. It serves as a reference for building similar serverless applications with a clear separation between infrastructure (Terraform) and application (AWS SAM) layers.
+0shared is a serverless file-sharing platform deployed on AWS. It uses a split tooling strategy: **Terraform** for stateful infrastructure and **AWS SAM** for stateless API-triggered Lambda functions.
 
 The backend API is served under the `/api` path prefix so that a single CloudFront distribution can serve both the static frontend (`/*`) and the API (`/api/*`) from one domain, without CORS.
 
@@ -39,13 +39,27 @@ Upload flow (presigned URL + S3 event):
 
   Client ──► POST /api/upload ──► Upload Lambda ──► presigned PUT URL
                                                             │
-  Client ◄── presigned URL ─────────────────────────────────┘
+  Client ◄── presigned URL ────────────────────────────────┘
       │
       ▼ (direct PUT to S3)
   ┌──────────┐
   │ S3       │
   │ (files)  │──► S3 Event ──► SQS Queue ──► Registration Lambda ──► DynamoDB
-  └──────────┘                                                      (File entity)
+  └──────────┘                                                     (File entity)
+
+Download flow (presigned URL + Lambda interface):
+
+  Client ──► GET /api/download/{fileId} ──► Download Lambda ──► presigned GET URL
+                                                                     │
+  Client ◄── presigned URL ─────────────────────────────────────────┘
+      │
+      ▼ (direct GET from S3)
+  ┌──────────┐
+  │ S3       │
+  │ (files)  │
+  └──────────┘
+
+  Meanwhile: Download Lambda ──(async invoke)──► Interface Lambda ──► SQS ──► Counter Lambda ──► DynamoDB
 ```
 
 ---
@@ -61,15 +75,19 @@ Upload flow (presigned URL + S3 event):
 ├── frontend/              # React + Vite SPA (src/App.tsx, vite.config.ts)
 ├── agents.md
 ├── docs/
-│   ├── architecture-manual.md
-│   └── dynamodb-schema.md
+│   ├── architecture.md    # This file
+│   ├── backend.md         # API structure, endpoints, health check
+│   ├── auth.md            # Authentication system
+│   ├── file-upload.md     # File upload flow
+│   ├── file-download.md   # File download flow
+│   └── dynamodb-schema.md # Single-table design, entities, indexes
 └── sam-app/               # API Gateway + API-triggered Lambda (stateless compute)
-    ├── template.yaml      # SAM template (health, auth, upload functions + API)
+    ├── template.yaml      # SAM template (health, auth, upload, download functions + API)
     ├── samconfig.toml     # SAM config (stack name, parameter overrides)
     ├── resources.env      # Central resource names (source of truth)
     ├── Makefile           # Convenience targets (deploy, test, clean)
     ├── env.json           # Local environment variables
-    ├── scripts/clean.sh    # Clean DynamoDB + S3
+    ├── scripts/clean.sh   # Clean DynamoDB + S3
     ├── tests/integration/ # HTTP integration tests (mocha + chai)
     └── src/handlers/      # Lambda code (Node.js ESM)
         ├── health.mjs     # Health check endpoint (SAM)
@@ -210,11 +228,6 @@ Parameters:
     Type: String
 ```
 
-```bash
-# Deploy command
-sam build && sam deploy
-```
-
 The values live in `sam-app/samconfig.toml` (`parameter_overrides`) and are kept in sync with `resources.env`. For another environment, override on the command line:
 
 ```bash
@@ -241,7 +254,7 @@ Step 2 → all stateful infra: DynamoDB table, S3 files bucket, SQS queues, DLQs
          registration/download-counter Lambdas (SQS-triggered), S3 event notification,
          event source mappings, FileIdIndex GSI
 Step 3 → reads table/bucket names from samconfig.toml, deploys API-triggered Lambdas,
-         fetches download queue URL from Terraform output
+         fetches download interface Lambda name from Terraform output
 Step 3 → exports API URL (sam-app-ApiEndpoint) → consumed by Step 4
 Step 4 → reads the export, builds the SPA, uploads to S3, invalidates CloudFront
 ```
@@ -249,58 +262,14 @@ Step 4 → reads the export, builds the SPA, uploads to S3, invalidates CloudFro
 ### Deploy Commands
 
 ```bash
-# Step 1 — one-time (S3 state bucket)
-cd terraform/aws-bootstrap && terraform init && terraform apply
+# Full deployment (orchestrated via Makefile)
+make deploy
 
-# Step 2 — DynamoDB + S3 + SQS + registration Lambda + event source mapping
-cd terraform/aws-app && terraform init && terraform apply
-
-# Step 3 — API-triggered Lambdas + API Gateway (exports sam-app-ApiEndpoint)
-cd sam-app && sam build && sam deploy
-
-# Step 4 — S3 + CloudFront + frontend build/upload
-cd terraform/aws-frontend && terraform init && terraform apply
-```
-
-> `sam deploy` reads resource names from `samconfig.toml`, whose `parameter_overrides`
-> must match `resources.env`. The `aws-frontend` apply blocks until the SAM export exists.
-
----
-
-## Data Flow (Production)
-
-### API Requests
-
-```
-User ──► https://<cloudfront>.cloudfront.net/
-                │
-                ├── /api/* ──► CloudFront origin "api-gateway"
-                │                 │
-                │                 └── /Prod/api/* ──► API Gateway ──► Lambda ──► DynamoDB
-                │
-                └── /* (default) ──► CloudFront origin "s3-frontend"
-                                        │
-                                        └── GET /index.html ──► S3 bucket
-```
-
-### File Upload
-
-```
-1. Client ──► POST /api/upload ──► Upload Lambda (validates auth)
-                                      │
-                                      ├── Generates presigned PUT URL (1 GB max, 5 min TTL)
-                                      │   S3 key: uploads/{user_id}/{file_id}/{filename}
-                                      │
-2. Client ◄── { url, file_id } ◄──────┘
-
-3. Client ──► PUT <presigned_url> ──► S3 (files bucket) ──► ObjectCreated event
-                                                              │
-4. S3 ──► SQS Queue ──► Registration Lambda
-                          │
-                          ├── Parse S3 key → user_id, file_id, filename
-                          ├── S3 HeadObject → content_type, size
-                          ├── DynamoDB GetItem → owner_username
-                          └── DynamoDB PutItem → File entity + GSI attributes
+# Or step by step:
+cd terraform/aws-bootstrap && terraform init && terraform apply    # Step 1
+cd terraform/aws-app && terraform init && terraform apply          # Step 2
+cd sam-app && make deploy                                          # Step 3
+cd terraform/aws-frontend && terraform init && terraform apply     # Step 4
 ```
 
 ---
@@ -409,6 +378,12 @@ cd sam-app && ./scripts/clean.sh --dry-run # show what would be deleted
 - Message retention: 14 days
 - Only the Registration Lambda has `sqs:ReceiveMessage` permissions (via SAM event source mapping)
 
+### SQS (download queue)
+
+- Dead-letter queue (DLQ) catches failed counter updates (14-day retention)
+- Main queue visibility timeout: 4 minutes
+- Only the Counter Lambda has `sqs:ReceiveMessage` permissions
+
 ### CloudFront
 
 - OAC (Origin Access Control) is used instead of legacy OAI
@@ -420,14 +395,6 @@ cd sam-app && ./scripts/clean.sh --dry-run # show what would be deleted
 - REST API is deployed with a public endpoint
 - Auth routes (`/api/auth/*`) are publicly accessible
 - Protected routes validate the session via a Bearer token lookup in DynamoDB
-
-### File Upload
-
-- Presigned URLs expire after 5 minutes (short TTL limits exposure)
-- Presigned URLs enforce 1 GB max file size via `Content-Length-Range` condition
-- S3 key embeds `user_id` and `file_id` — no custom metadata needed
-- Filenames are sanitized (dangerous chars stripped, truncated to 255 chars)
-- Registration Lambda validates the S3 key structure before writing to DynamoDB
 
 ---
 
@@ -482,163 +449,3 @@ Dependencies flow forward, so destroy must happen in reverse.
 2. Export the table name as a Terraform output
 3. Pass it to SAM via `--parameter-overrides`
 4. Add IAM permissions in SAM (`DynamoDBCrudPolicy`)
-
-### Adding Authentication
-
-Auth is implemented as a stateful session system using DynamoDB.
-
-**Endpoints (all under `/api`):**
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| POST | `/api/auth/signup` | No | Create account (email + username + password) |
-| POST | `/api/auth/login` | No | Sign in, returns Bearer token |
-| POST | `/api/auth/logout` | Bearer | Destroy session |
-| GET | `/api/auth/me` | Bearer | Get current user profile |
-| GET | `/api/health` | No | Health check (DynamoDB + S3) |
-| POST | `/api/upload` | Bearer | Get presigned URL for file upload |
-| GET | `/api/download/{fileId}` | No | Get presigned URL for file download |
-
-**Flow:** Login → bcrypt verify → create session in DynamoDB → return `{ token }`. Each protected call reads `SESSION#<token>` to validate. Logout deletes both `SESSION#<token>` records.
-
-**Dependencies:** `bcryptjs` (pure-JS bcrypt), `@aws-sdk/lib-dynamodb` (DocumentClient).
-
-### Adding File Upload
-
-File upload uses a **presigned URL + S3 event notification** pattern.
-
-**Architecture:**
-
-| Component | Layer | Responsibility |
-|-----------|-------|----------------|
-| Upload Lambda | SAM | Validates auth, generates presigned PUT URL (1 GB max, 5 min TTL) |
-| Registration Lambda | Terraform | Parses S3 event, writes File entity to DynamoDB |
-| S3 files bucket | Terraform | Stores uploaded files, CORS, event notification → SQS |
-| SQS queue + DLQ | Terraform | Buffers S3 events, provides retry/DLQ for failed registrations |
-| Event source mapping | Terraform | Connects SQS queue to registration Lambda |
-
-**Key insight:** All upload infrastructure (SQS, S3 events, registration Lambda, event source mapping) is centralized in Terraform. Only the API-triggered Upload Lambda stays in SAM for local testing.
-
-**S3 key format:** `uploads/{user_id}/{file_id}/{sanitized_filename}`
-
-**Registration Lambda writes the File entity:**
-
-```javascript
-{
-  PK: `USER#${userId}`,
-  SK: `FILE#${fileId}`,
-  file_id: fileId,
-  owner_user_id: userId,
-  owner_username: username,        // from DynamoDB GetItem
-  name: filename,
-  name_lower: filename.toLowerCase(),
-  size: contentLength,             // from S3 HeadObject
-  content_type: contentType,       // from S3 HeadObject
-  upload_date: new Date().toISOString(),
-  download_count: 0,
-  // GSI attributes
-  gsiname_pk: `NAME#FILE#${shard}`,
-  gsiname_sk: `${filename.toLowerCase()}#${fileId}`,
-  gsidate_pk: 'FILE#DATE',
-  gsidate_sk: `${uploadDate}#${fileId}`,
-  gsidown_pk: 'FILE#DOWN',
-  gsidown_sk: `${String(0).padStart(10, '0')}#${fileId}`,
-}
-```
-
-**Adding a new upload endpoint:**
-
-1. Add Upload Lambda definition in `sam-app/template.yaml`
-2. Add Upload Lambda handler in `sam-app/src/handlers/upload.mjs`
-3. Add Registration Lambda in `terraform/aws-app/resources/modules/upload-queue/main.tf`
-4. Add SQS queue + DLQ in `terraform/aws-app/resources/modules/upload-queue/main.tf`
-5. Add S3 event notification in `terraform/aws-app/resources/modules/files/main.tf`
-6. Add event source mapping (SQS → Registration Lambda) in `terraform/aws-app/resources/modules/upload-queue/main.tf`
-7. Update `sam-app/resources.env` with queue name documentation
-
-### Adding File Download
-
-File download uses a **presigned URL + Lambda interface** pattern. SAM handles the storefront only; Terraform manages all async processing.
-
-**Architecture:**
-
-| Component | Layer | Responsibility |
-|-----------|-------|----------------|
-| Download Lambda | SAM | Validates fileId, generates presigned GET URL (storefront only) |
-| Interface Lambda | Terraform | Receives async invoke from SAM, sends SQS message |
-| Download Counter Lambda | Terraform | Increments download_count, updates GSI attributes |
-| SQS queue + DLQ | Terraform | Buffers download events, provides retry/DLQ for failed counter updates |
-| Event source mapping | Terraform | Connects SQS queue to counter Lambda |
-
-**Key insight:** SAM knows nothing about SQS. It only generates the presigned URL and fire-and-forgets to the Terraform interface Lambda. All async processing infrastructure lives in Terraform.
-
-**Download flow:**
-
-```
-1. Client ──► GET /api/download/{fileId} ──► Download Lambda (no auth required)
-                                              │
-                                              ├── Query FileIdIndex GSI → get file entity
-                                              ├── Generate presigned GET URL (5 min TTL)
-                                              │   S3 key: uploads/{owner_user_id}/{fileId}/{filename}
-                                              │
-2. Client ◄── { url, filename, contentType, size, downloadCount } ◄──┘
-
-3. Client ──► GET <presigned_url> ──► S3 (files bucket) ──► File content returned
-
-4. Meanwhile: Download Lambda ──(async invoke)──► Interface Lambda ──► SQS Queue ──► Counter Lambda
-                                                                                      │
-                                                                                      ├── GetItem → current download_count
-                                                                                      ├── UpdateItem → download_count + 1
-                                                                                      └── UpdateItem → gsidown_sk (new GSI key)
-```
-
-**Why Lambda interface over direct SQS from SAM:**
-
-- Clean separation: SAM = storefront, Terraform = async processing
-- SAM doesn't need SQS permissions — only Lambda invoke
-- Interface Lambda can be extended (validation, logging, routing)
-- SQS provides DLQ for failed counter updates (14-day retention)
-- Decouples download response from counter update latency
-
-**Download endpoint (no auth):**
-
-```javascript
-// sam-app/src/handlers/download.mjs
-GET /api/download/{fileId}
-
-1. Query FileIdIndex GSI: file_id = :fileId
-2. If not found → 404
-3. Generate presigned GET URL (GetObjectCommand, 5 min TTL)
-4. Invoke Interface Lambda async (InvocationType: Event)
-5. Return { url, filename, contentType, size, downloadCount }
-```
-
-**Interface Lambda:**
-
-```javascript
-// terraform/aws-app/src/invoke-download-counter.mjs
-1. Receive { fileId, userId } from SAM invoke
-2. Send SQS message { fileId, userId } to download queue
-3. Return 200 OK
-```
-
-**Download Counter Lambda:**
-
-```javascript
-// terraform/aws-app/src/register-download.mjs
-1. Parse SQS message: { fileId, userId }
-2. GetItem: PK=USER#{userId}, SK=FILE#{fileId}
-3. newCount = (download_count || 0) + 1
-4. newGsiKey = String(newCount).padStart(10, "0") + "#" + fileId
-5. UpdateItem: SET download_count = :newCount, gsidown_sk = :newGsiKey
-```
-
-**Adding a new download endpoint:**
-
-1. Add Download Lambda definition in `sam-app/template.yaml`
-2. Add Download Lambda handler in `sam-app/src/handlers/download.mjs`
-3. Add Interface Lambda in `terraform/aws-app/resources/modules/download-queue/main.tf`
-4. Add Download Counter Lambda in `terraform/aws-app/resources/modules/download-queue/main.tf`
-5. Add SQS queue + DLQ in `terraform/aws-app/resources/modules/download-queue/main.tf`
-6. Add event source mapping (SQS → Counter Lambda) in `terraform/aws-app/resources/modules/download-queue/main.tf`
-7. Add FileIdIndex GSI to DynamoDB table in `terraform/aws-app/resources/modules/database/main.tf`

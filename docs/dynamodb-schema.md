@@ -98,6 +98,7 @@ None. The table's SK (range key) already supports `begins_with` and `between` qu
 | NameSearch | GSI | `gsiname_pk` | `gsiname_sk` | `KEYS_ONLY` | User, File |
 | UploadDateIndex | GSI | `gsidate_pk` | `gsidate_sk` | `KEYS_ONLY` | File |
 | DownloadCountIndex | GSI | `gsidown_pk` | `gsidown_sk` | `KEYS_ONLY` | File |
+| FileIdIndex | GSI | `file_id` | (none) | `ALL` | File |
 
 ### EmailIndex - Lookup user by email
 
@@ -167,6 +168,19 @@ File names are sharded by first character hex (`NAME#FILE#6a`, `NAME#FILE#72`) t
 
 > `download_count` must be stored zero-padded to 10 digits (e.g., `0000000042`) for correct lexicographic ordering.
 
+### FileIdIndex - Lookup file by ID (for public downloads)
+
+| Key | Type | Value |
+|-----|------|-------|
+| `file_id` | HASH | File's UUID v7 |
+
+Allows looking up a file by its ID alone, without knowing the owner. Used by the public download endpoint.
+
+| file_id | SK |
+|---------|-----|
+| file-uuid-1 | FILE#file-uuid-1 |
+| file-uuid-2 | FILE#file-uuid-2 |
+
 ---
 
 ## Access Patterns
@@ -181,6 +195,7 @@ File names are sharded by first character hex (`NAME#FILE#6a`, `NAME#FILE#72`) t
 | 6 | Search files by name | NameSearch | `gsiname_pk = NAME#FILE#{shard}, begins_with(gsiname_sk, {prefix})` |
 | 7 | Filter files by date | UploadDateIndex | `gsidate_pk = FILE#DATE, between({start}, {end})` |
 | 8 | Top downloaded files | DownloadCountIndex | `gsidown_pk = FILE#DOWN, scan_forward=false` |
+| 9 | Get file by ID | FileIdIndex | `file_id = :fileId` → returns file item with all attributes |
 
 ---
 
