@@ -58,6 +58,7 @@ Upload flow (presigned URL + S3 event):
 │   ├── aws-app/           # DynamoDB table + S3 files bucket + SQS queue + registration Lambda
 │   └── aws-frontend/      # S3 static bucket + CloudFront + OAC + deploy
 ├── frontend/              # React + Vite SPA (src/App.tsx, vite.config.ts)
+├── agents.md
 ├── docs/
 │   ├── architecture-manual.md
 │   └── dynamodb-schema.md

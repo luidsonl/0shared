@@ -29,10 +29,12 @@ The application uses Amazon DynamoDB with a **Single-Table Design** provisioned 
 ### 4. Backend & API (AWS SAM)
 The backend is managed separately from Terraform using **AWS SAM**.
 All API routes are served under the `/api` path prefix (e.g. `/api/auth/login`,
-`/api/health`) so CloudFront can route them to API Gateway from the same domain.
-See [`docs/architecture-manual.md`](docs/architecture-manual.md) for details on
-the application layer (Lambda + API Gateway), deployment order, and integration
-patterns.
+`/api/health`) so CloudFront can route them to API Gateway from one domain.
+
+**Documentation:**
+- [`agents.md`](agents.md) — Documentation index
+- [`docs/architecture-manual.md`](docs/architecture-manual.md) — Full architecture, deployment, and integration patterns
+- [`docs/dynamodb-schema.md`](docs/dynamodb-schema.md) — Database schema and access patterns
 
 ---
 
