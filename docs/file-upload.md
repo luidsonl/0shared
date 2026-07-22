@@ -142,11 +142,220 @@ S3 handles the upload — no Lambda is involved in this phase.
 
 ---
 
+## Multipart Upload (Large Files)
+
+For files larger than 100 MB, use the multipart upload API. This splits the file into chunks and uploads them in parallel, providing better reliability and performance for large files.
+
+### When to Use Multipart
+
+| File Size | Recommended Approach |
+|-----------|---------------------|
+| < 100 MB | Simple PUT (`POST /api/upload`) |
+| 100 MB - 50 GB | Multipart (`POST /api/upload/initiate`) |
+
+### Multipart Upload Flow
+
+```
+  Client                     API (SAM)                    S3                      SQS                  DynamoDB
+    │                            │                          │                       │                       │
+    │  POST /api/upload/initiate │                          │                       │                       │
+    │  {filename, contentType,   │                          │                       │                       │
+    │   fileSize, partSize}      │                          │                       │                       │
+    │───────────────────────────►│                          │                       │                       │
+    │                            │                          │                       │                       │
+    │  ◄── presigned URLs +      │                          │                       │                       │
+    │      uploadId + parts[]    │                          │                       │                       │
+    │                            │                          │                       │                       │
+    │  PUT /uploads/... (part 1) │                          │                       │                       │
+    │  (direct to S3)            │─────────────────────────►│                       │                       │
+    │                            │                          │                       │                       │
+    │  ◄── 200 OK + ETag ───────│                          │                       │                       │
+    │                            │                          │                       │                       │
+    │  ... (upload other parts)  │                          │                       │                       │
+    │                            │                          │                       │                       │
+    │  POST /api/upload/complete │                          │                       │                       │
+    │  {uploadId, key, parts[]}  │                          │                       │                       │
+    │───────────────────────────►│                          │                       │                       │
+    │                            │  CompleteMultipartUpload  │                       │                       │
+    │                            │─────────────────────────►│                       │                       │
+    │                            │                          │                       │                       │
+    │                            │                          │  S3 Event             │                       │
+    │                            │                          │──────────────────────►│                       │
+    │                            │                          │                       │  File entity           │
+    │                            │                          │                       │──────────────────────►│
+```
+
+---
+
+## Multipart Upload API
+
+### Step 1: Initiate Multipart Upload
+
+**Endpoint:** `POST /api/upload/initiate`
+**Auth:** Required (Bearer token)
+
+#### Request
+
+```json
+POST /api/upload/initiate
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "filename": "large-video.mp4",
+  "contentType": "video/mp4",
+  "fileSize": 10737418240,
+  "partSize": 5242880
+}
+```
+
+#### Request Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `filename` | string | Yes | Original filename |
+| `contentType` | string | No | MIME type (defaults to `application/octet-stream`) |
+| `fileSize` | number | Yes | Total file size in bytes |
+| `partSize` | number | No | Part size in bytes (default: 5 MB) |
+
+#### Response (200)
+
+```json
+{
+  "uploadId": "upload_abc123",
+  "fileId": "550e8400-e29b-41d4-a716-446655440000",
+  "userId": "user_abc123",
+  "key": "uploads/user_abc123/550e8400-.../large-video.mp4",
+  "partSize": 5242880,
+  "numParts": 2048,
+  "fileSize": 10737418240,
+  "parts": [
+    {
+      "partNumber": 1,
+      "url": "https://s3.us-east-1.amazonaws.com/bucket/uploads/...?...",
+      "start": 0,
+      "end": 5242879,
+      "size": 5242880
+    },
+    {
+      "partNumber": 2,
+      "url": "https://s3.us-east-1.amazonaws.com/bucket/uploads/...?...",
+      "start": 5242880,
+      "end": 10485759,
+      "size": 5242880
+    }
+  ]
+}
+```
+
+#### Response Fields
+
+| Field | Description |
+|-------|-------------|
+| `uploadId` | Multipart upload ID (needed for completion) |
+| `fileId` | Unique file identifier (UUID) |
+| `userId` | Owner's user ID |
+| `key` | S3 object key |
+| `partSize` | Actual part size used |
+| `numParts` | Total number of parts |
+| `fileSize` | Total file size |
+| `parts[]` | Array of presigned URLs for each part |
+
+### Step 2: Upload Parts
+
+Upload each part directly to S3 using the presigned URLs:
+
+```typescript
+// Upload parts in parallel (recommended for performance)
+const etags = await Promise.all(
+  response.parts.map(async (part) => {
+    const chunk = file.slice(part.start, part.end + 1);
+    const res = await fetch(part.url, {
+      method: "PUT",
+      headers: { "Content-Type": contentType },
+      body: chunk,
+    });
+    return {
+      partNumber: part.partNumber,
+      ETag: res.headers.get("ETag"),
+    };
+  })
+);
+```
+
+**Important:** Each part upload returns an `ETag` header. You must collect all ETags before completing the upload.
+
+### Step 3: Complete Multipart Upload
+
+**Endpoint:** `POST /api/upload/complete`
+**Auth:** Required (Bearer token)
+
+#### Request
+
+```json
+POST /api/upload/complete
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "uploadId": "upload_abc123",
+  "key": "uploads/user_abc123/550e8400-.../large-video.mp4",
+  "parts": [
+    { "partNumber": 1, "ETag": "\"abc123\"" },
+    { "partNumber": 2, "ETag": "\"def456\"" }
+  ]
+}
+```
+
+#### Request Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `uploadId` | string | Yes | From initiate response |
+| `key` | string | Yes | From initiate response |
+| `parts[]` | array | Yes | Array of `{partNumber, ETag}` from uploads |
+
+#### Response (200)
+
+```json
+{
+  "ok": true,
+  "key": "uploads/user_abc123/550e8400-.../large-video.mp4"
+}
+```
+
+---
+
+## Multipart Upload Limits
+
+| Setting | Value |
+|---------|-------|
+| Maximum file size | 50 GB |
+| Minimum part size | 5 MB |
+| Maximum parts | 10,000 |
+| URL TTL | 5 minutes |
+| Recommended threshold | > 100 MB |
+
+---
+
+## Error Scenarios
+
+| Scenario | Handling |
+|----------|----------|
+| S3 key format invalid | Logged, message skipped (not sent to DLQ) |
+| HeadObject fails | Message sent to DLQ for retry |
+| DynamoDB write fails | Message sent to DLQ for retry |
+| File > 1 GB (simple PUT) | Rejected at the presigned URL edge — zero cost |
+| File > 50 GB (multipart) | Rejected by API with 400 error |
+| Incomplete multipart upload | S3 auto-aborts after 7 days; parts can be cleaned up via lifecycle rules |
+
+---
+
 ## S3 Event → SQS → Registration Lambda
 
 After the file lands in S3, an event notification is sent:
 
-1. **S3 Event Notification:** Configured in Terraform (`terraform/aws-app/resources/modules/files/main.tf`) — sends `s3:ObjectCreated:*` events to the upload SQS queue.
+1. **S3 Event Notification:** Configured in Terraform (`terraform/aws-app/resources/modules/files/main.tf`) — sends `s3:ObjectCreated:Put` and `s3:ObjectCreated:CompleteMultipartUpload` events to the upload SQS queue.
 2. **SQS Message:** Contains the S3 event record (bucket, key, size).
 3. **Registration Lambda:** Triggered by SQS event source mapping (Terraform-managed). Processes the message and writes the file entity to DynamoDB.
 

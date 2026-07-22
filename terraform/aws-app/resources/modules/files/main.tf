@@ -52,8 +52,8 @@ resource "aws_s3_bucket_notification" "upload" {
   bucket = aws_s3_bucket.this.id
 
   queue {
-    queue_arn = var.upload_queue_arn
-    events    = ["s3:ObjectCreated:*"]
+    queue_arn     = var.upload_queue_arn
+    events        = ["s3:ObjectCreated:Put", "s3:ObjectCreated:CompleteMultipartUpload"]
     filter_prefix = "uploads/"
   }
 

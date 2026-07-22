@@ -90,6 +90,16 @@ Resources:
           Properties:
             Path: /api/upload
             Method: POST
+        UploadInitiateApi:
+          Type: Api
+          Properties:
+            Path: /api/upload/initiate
+            Method: POST
+        UploadCompleteApi:
+          Type: Api
+          Properties:
+            Path: /api/upload/complete
+            Method: POST
       Policies:
         - CloudWatchPutMetricPolicy: {}
         - S3CrudPolicy:
