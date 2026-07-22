@@ -12,7 +12,7 @@ describe("Auth API", () => {
   let userId;
 
   describe("POST /api/auth/signup", () => {
-    it("cria conta com dados validos", async () => {
+    it("creates account with valid data", async () => {
       const res = await api("POST", "/api/auth/signup", user);
       expect(res.status).to.equal(200);
       expect(res.body.userId).to.be.a("string");
@@ -21,13 +21,13 @@ describe("Auth API", () => {
       userId = res.body.userId;
     });
 
-    it("rejeita email duplicado com 409", async () => {
+    it("rejects duplicate email with 409", async () => {
       const res = await api("POST", "/api/auth/signup", user);
       expect(res.status).to.equal(409);
       expect(res.body.error).to.equal("Email already registered");
     });
 
-    it("rejeita senha curta com 400", async () => {
+    it("rejects short password with 400", async () => {
       const res = await api("POST", "/api/auth/signup", {
         email: `other-${id}@test.com`,
         username: `other-${id}`,
@@ -36,14 +36,14 @@ describe("Auth API", () => {
       expect(res.status).to.equal(400);
     });
 
-    it("rejeita campos faltando com 400", async () => {
+    it("rejects missing fields with 400", async () => {
       const res = await api("POST", "/api/auth/signup", { email: "x@y.com" });
       expect(res.status).to.equal(400);
     });
   });
 
   describe("POST /api/auth/login", () => {
-    it("retorna token com credenciais validas", async () => {
+    it("returns token with valid credentials", async () => {
       const res = await api("POST", "/api/auth/login", {
         email: user.email,
         password: user.password,
@@ -55,7 +55,7 @@ describe("Auth API", () => {
       token = res.body.token;
     });
 
-    it("rejeita senha errada com 401", async () => {
+    it("rejects wrong password with 401", async () => {
       const res = await api("POST", "/api/auth/login", {
         email: user.email,
         password: "wrongpassword",
@@ -63,7 +63,7 @@ describe("Auth API", () => {
       expect(res.status).to.equal(401);
     });
 
-    it("rejeita email inexistente com 401", async () => {
+    it("rejects non-existent email with 401", async () => {
       const res = await api("POST", "/api/auth/login", {
         email: "nao-existe@test.com",
         password: "Test1234",
@@ -73,7 +73,7 @@ describe("Auth API", () => {
   });
 
   describe("GET /api/auth/me", () => {
-    it("retorna perfil com token valido", async () => {
+    it("returns profile with valid token", async () => {
       const res = await api("GET", "/api/auth/me", null, token);
       expect(res.status).to.equal(200);
       expect(res.body.userId).to.equal(userId);
@@ -81,19 +81,19 @@ describe("Auth API", () => {
       expect(res.body.username).to.equal(user.username);
     });
 
-    it("rejeita sem token com 401", async () => {
+    it("rejects without token with 401", async () => {
       const res = await api("GET", "/api/auth/me");
       expect(res.status).to.equal(401);
     });
   });
 
   describe("POST /api/auth/logout", () => {
-    it("destroi sessao ativa", async () => {
+    it("destroys active session", async () => {
       const res = await api("POST", "/api/auth/logout", null, token);
       expect(res.status).to.equal(200);
     });
 
-    it("GET /api/auth/me rejeita token apos logout", async () => {
+    it("GET /api/auth/me rejects token after logout", async () => {
       const res = await api("GET", "/api/auth/me", null, token);
       expect(res.status).to.equal(401);
     });
