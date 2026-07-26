@@ -12,17 +12,20 @@ TF          ?= terraform
 STACK_NAME  ?= app-0shared-backend
 REGION      ?= us-east-1
 
-.PHONY: all deploy bootstrap infra backend frontend build-frontend redeploy-api destroy destroy-frontend
+.PHONY: all deploy deploy-full bootstrap infra backend frontend build-frontend redeploy-api destroy destroy-frontend
 
 all: deploy
 
-# Full ordered deployment
-deploy: bootstrap infra backend frontend
+# Regular deployment (skips state bucket — already exists)
+deploy: infra backend frontend
 	@echo ""
 	@echo "=========================================================="
-	@echo " Full deployment complete."
+	@echo " Deployment complete."
 	@echo " CloudFront: $$(cd terraform/aws-frontend && $(TF) output -raw cloudfront_domain_name)"
 	@echo "=========================================================="
+
+# First-time deployment (includes state bucket creation)
+deploy-full: bootstrap deploy
 
 # 1. State backend (one-time)
 bootstrap:
