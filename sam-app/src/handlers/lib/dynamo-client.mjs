@@ -5,6 +5,7 @@ import {
   PutCommand,
   DeleteCommand,
   TransactWriteCommand,
+  QueryCommand,
 } from "@aws-sdk/lib-dynamodb";
 
 const client = new DynamoDBClient({});
@@ -46,8 +47,11 @@ export async function createUser(userId, email, username, passwordHash) {
             userId,
             email,
             username,
+            username_lower: username.toLowerCase(),
             passwordHash,
             createdAt: now(),
+            gsiname_pk: "NAME#USER",
+            gsiname_sk: `${username.toLowerCase()}#${userId}`,
           },
         },
       },
@@ -131,4 +135,22 @@ export async function deleteSession(token) {
       },
     ],
   }));
+}
+
+export async function searchUsers(queryPrefix, limit, exclusiveStartKey) {
+  const params = {
+    TableName: TABLE,
+    IndexName: "NameSearch",
+    KeyConditionExpression: "gsiname_pk = :pk AND begins_with(gsiname_sk, :skPrefix)",
+    ExpressionAttributeValues: {
+      ":pk": "NAME#USER",
+      ":skPrefix": queryPrefix,
+    },
+    Limit: limit,
+  };
+  if (exclusiveStartKey) {
+    params.ExclusiveStartKey = exclusiveStartKey;
+  }
+  const result = await doc.send(new QueryCommand(params));
+  return { Items: result.Items || [], LastEvaluatedKey: result.LastEvaluatedKey };
 }

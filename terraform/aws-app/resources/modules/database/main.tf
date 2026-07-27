@@ -67,10 +67,11 @@ resource "aws_dynamodb_table" "this" {
   }
 
   global_secondary_index {
-    name     = "NameSearch"
-    projection_type = "KEYS_ONLY"
-    hash_key = "gsiname_pk"
-    range_key = "gsiname_sk"
+    name              = "NameSearch"
+    projection_type   = "INCLUDE"
+    non_key_attributes = ["username"]
+    hash_key          = "gsiname_pk"
+    range_key         = "gsiname_sk"
   }
 
   global_secondary_index {

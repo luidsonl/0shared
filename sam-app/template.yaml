@@ -145,6 +145,24 @@ Resources:
         - DynamoDBCrudPolicy:
             TableName: !Ref DynamoDBTableName
 
+  UsersFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/handlers/
+      Handler: users.lambdaHandler
+      Description: User search and profile operations
+      Timeout: 15
+      Policies:
+        - CloudWatchPutMetricPolicy: {}
+        - DynamoDBReadPolicy:
+            TableName: !Ref DynamoDBTableName
+      Events:
+        SearchUsers:
+          Type: Api
+          Properties:
+            Path: /api/users/search
+            Method: GET
+
 Outputs:
   ApiEndpoint:
     Description: "API Gateway endpoint URL (Prod stage)"
