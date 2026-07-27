@@ -61,6 +61,10 @@ describe("Users API — Search", function () {
       expect(res.body.users.length).to.equal(2);
       const usernames = res.body.users.map((u) => u.username).sort();
       expect(usernames).to.deep.equal(["alice_test", "alice_work"]);
+      for (const u of res.body.users) {
+        expect(u).to.have.property("userId").that.is.a("string");
+        expect(u).to.have.property("username").that.is.a("string");
+      }
     });
 
     it("returns single user for exact match prefix", async function () {
@@ -68,6 +72,7 @@ describe("Users API — Search", function () {
       expect(res.status).to.equal(200);
       expect(res.body.users.length).to.equal(1);
       expect(res.body.users[0].username).to.equal("bob_test");
+      expect(res.body.users[0]).to.have.property("userId").that.is.a("string");
     });
 
     it("returns empty array for non-matching prefix", async function () {

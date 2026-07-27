@@ -41,7 +41,7 @@ async function handleSearch(event) {
     : null;
 
   const users = (result.Items || []).map((item) => ({
-    userId: item.userId,
+    userId: item.PK.replace("USER#", ""),
     username: item.username,
   }));
 
