@@ -89,7 +89,7 @@ resource "aws_lambda_function" "interface" {
   function_name = local.interface_lambda_name
   role          = aws_iam_role.interface_lambda.arn
   handler       = "invoke-download-counter.lambdaHandler"
-  runtime       = "nodejs22.x"
+  runtime       = var.lambda_runtime
   timeout       = 10
   memory_size   = 128
 
@@ -180,7 +180,7 @@ resource "aws_lambda_function" "counter" {
   function_name = local.counter_lambda_name
   role          = aws_iam_role.counter_lambda.arn
   handler       = "register-download.lambdaHandler"
-  runtime       = "nodejs22.x"
+  runtime       = var.lambda_runtime
   timeout       = 60
   memory_size   = 128
 

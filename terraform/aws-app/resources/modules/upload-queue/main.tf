@@ -113,7 +113,7 @@ resource "aws_lambda_function" "registration" {
   function_name = local.lambda_name
   role          = aws_iam_role.registration_lambda.arn
   handler       = "register-upload.lambdaHandler"
-  runtime       = "nodejs22.x"
+  runtime       = var.lambda_runtime
   timeout       = 60
   memory_size   = 128
 

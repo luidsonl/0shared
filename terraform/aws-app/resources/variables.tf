@@ -23,5 +23,15 @@ variable "files_bucket_suffix" {
 
 variable "queue_suffix" {
   type    = string
-  default = "-upload"
+  default = "_upload"
+}
+
+variable "download_queue_suffix" {
+  type    = string
+  default = "_download"
+}
+
+variable "lambda_runtime" {
+  type    = string
+  default = "nodejs22.x"
 }

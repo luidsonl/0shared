@@ -1,8 +1,8 @@
 resource "aws_s3_bucket" "terraform_state" {
   bucket = var.state_bucket_name
   tags = {
-    project_name = var.project_name
-    owner        = var.owner
+    project = var.project_name
+    owner   = var.owner
   }
 }
 

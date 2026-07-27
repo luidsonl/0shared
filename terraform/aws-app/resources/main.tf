@@ -20,13 +20,15 @@ module "upload_queue" {
   dynamodb_table_name = module.database.table_name
   dynamodb_table_arn  = module.database.table_arn
   files_bucket_name   = "${local.full_prefix}${var.files_bucket_suffix}"
-  files_bucket_arn    = "arn:aws:s3:::${local.full_prefix}${var.files_bucket_suffix}"
+  files_bucket_arn    = local.files_bucket_arn
+  lambda_runtime      = var.lambda_runtime
 }
 
 module "download_queue" {
   source              = "./modules/download-queue"
-  queue_name          = "${var.project_name}${local.env_under}-download"
+  queue_name          = "${var.project_name}${local.env_under}${var.download_queue_suffix}"
   project_name        = var.project_name
   dynamodb_table_name = module.database.table_name
   dynamodb_table_arn  = module.database.table_arn
+  lambda_runtime      = var.lambda_runtime
 }

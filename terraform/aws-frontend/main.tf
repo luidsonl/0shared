@@ -5,7 +5,7 @@ data "aws_caller_identity" "current" {}
 
 # The API URL is exported by SAM after the backend stack is deployed.
 data "aws_cloudformation_export" "api_url" {
-  name = "app-0shared-backend-ApiEndpoint"
+  name = "${var.sam_stack_name}-ApiEndpoint"
 }
 
 # ---------------------------------------------------------------------------
@@ -92,14 +92,14 @@ resource "aws_cloudfront_distribution" "main" {
 
   origin {
     domain_name              = aws_s3_bucket.frontend.bucket_regional_domain_name
-    origin_id                = "s3-frontend"
+    origin_id                = local.s3_origin_id
     origin_access_control_id = aws_cloudfront_origin_access_control.main.id
   }
 
   origin {
     domain_name = regex("https://([^/]+)", data.aws_cloudformation_export.api_url.value)[0]
     origin_path = regex("https://[^/]+(/.*)", data.aws_cloudformation_export.api_url.value)[0]
-    origin_id   = "api-gateway"
+    origin_id   = local.api_origin_id
 
     custom_origin_config {
       http_port              = 80
@@ -110,7 +110,7 @@ resource "aws_cloudfront_distribution" "main" {
   }
 
   default_cache_behavior {
-    target_origin_id       = "s3-frontend"
+    target_origin_id       = local.s3_origin_id
     viewer_protocol_policy = "redirect-to-https"
     allowed_methods        = ["GET", "HEAD", "OPTIONS"]
     cached_methods         = ["GET", "HEAD"]
@@ -126,7 +126,7 @@ resource "aws_cloudfront_distribution" "main" {
 
   ordered_cache_behavior {
     path_pattern           = "/api/*"
-    target_origin_id       = "api-gateway"
+    target_origin_id       = local.api_origin_id
     viewer_protocol_policy = "redirect-to-https"
     allowed_methods        = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
     cached_methods         = ["GET", "HEAD"]

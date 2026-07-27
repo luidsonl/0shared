@@ -13,3 +13,8 @@ variable "dynamodb_table_name" {
 variable "dynamodb_table_arn" {
   type = string
 }
+
+variable "lambda_runtime" {
+  type    = string
+  default = "nodejs22.x"
+}

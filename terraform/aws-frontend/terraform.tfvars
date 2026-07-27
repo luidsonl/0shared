@@ -5,6 +5,9 @@ region       = "us-east-1"
 namespace    = "luidsonl"
 project_name = "0shared"
 environment  = ""
+owner        = "luidsonl"
+
+sam_stack_name = "app-0shared-backend"
 
 front_bucket_suffix = "-front"
 oac_name_suffix     = "-s3-oac"

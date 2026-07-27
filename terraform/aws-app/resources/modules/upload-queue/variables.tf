@@ -21,3 +21,8 @@ variable "files_bucket_name" {
 variable "files_bucket_arn" {
   type = string
 }
+
+variable "lambda_runtime" {
+  type    = string
+  default = "nodejs22.x"
+}

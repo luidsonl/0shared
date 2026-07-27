@@ -19,6 +19,12 @@ variable "environment" {
   default     = ""
 }
 
+variable "owner" {
+  type        = string
+  description = "Owner tag value"
+  default     = null
+}
+
 variable "front_bucket_suffix" {
   type        = string
   description = "Suffix appended to the frontend S3 bucket name (e.g. '-www')"
@@ -29,4 +35,9 @@ variable "oac_name_suffix" {
   type        = string
   description = "Suffix appended to the CloudFront OAC name (e.g. '-oac')"
   default     = "-s3-oac"
+}
+
+variable "sam_stack_name" {
+  type        = string
+  description = "SAM CloudFormation stack name (used to look up the ApiEndpoint export)"
 }
