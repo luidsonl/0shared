@@ -2,6 +2,16 @@ import { S3Client, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, QueryCommand, DeleteCommand } from "@aws-sdk/lib-dynamodb";
 import { requireAuth } from "./middleware/auth.mjs";
+import {
+  json,
+  badRequest,
+  unauthorized,
+  notFound,
+  forbidden,
+  methodNotAllowed,
+  internalError,
+  fileDeletedResponse,
+} from "./lib/dto.mjs";
 
 const s3 = new S3Client({});
 const dynamo = DynamoDBDocumentClient.from(new DynamoDBClient({}));
@@ -9,20 +19,12 @@ const dynamo = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const TABLE = process.env.DYNAMODB_TABLE;
 const BUCKET = process.env.FILES_BUCKET;
 
-function json(statusCode, data) {
-  return {
-    statusCode,
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  };
-}
-
 async function deleteFile(event) {
   const fileId = event.pathParameters?.fileId;
-  if (!fileId) return json(400, { error: "Missing fileId" });
+  if (!fileId) return badRequest("Missing fileId");
 
   const user = await requireAuth(event);
-  if (!user) return json(401, { error: "Unauthorized" });
+  if (!user) return unauthorized();
 
   const result = await dynamo.send(new QueryCommand({
     TableName: TABLE,
@@ -33,10 +35,10 @@ async function deleteFile(event) {
   }));
 
   const file = result.Items?.[0];
-  if (!file) return json(404, { error: "File not found" });
+  if (!file) return notFound("File not found");
 
   if (file.owner_user_id !== user.userId) {
-    return json(403, { error: "Not authorized to delete this file" });
+    return forbidden("Not authorized to delete this file");
   }
 
   const key = `uploads/${file.owner_user_id}/${fileId}/${file.name}`;
@@ -48,15 +50,15 @@ async function deleteFile(event) {
     Key: { PK: `USER#${file.owner_user_id}`, SK: `FILE#${fileId}` },
   }));
 
-  return json(200, { message: "File deleted", fileId });
+  return fileDeletedResponse(fileId);
 }
 
 export async function lambdaHandler(event) {
   try {
     if (event.httpMethod === "DELETE") return deleteFile(event);
-    return json(405, { error: "Method not allowed" });
+    return methodNotAllowed();
   } catch (err) {
     console.error(JSON.stringify({ error: err.message }));
-    return json(500, { error: "Internal server error" });
+    return internalError();
   }
 }

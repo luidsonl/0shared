@@ -7,6 +7,16 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { requireAuth } from "./middleware/auth.mjs";
+import {
+  json,
+  notFound,
+  badRequest,
+  unauthorized,
+  internalError,
+  simpleUploadResponse,
+  multipartInitiateResponse,
+  multipartCompleteResponse,
+} from "./lib/dto.mjs";
 
 const s3 = new S3Client({});
 const BUCKET = process.env.FILES_BUCKET;
@@ -15,14 +25,6 @@ const MULTIPART_THRESHOLD = 100 * 1024 * 1024; // 100 MB - use multipart above t
 const MULTIPART_MAX_SIZE = 50 * 1024 * 1024 * 1024; // 50 GB max for multipart
 const DEFAULT_PART_SIZE = 5 * 1024 * 1024; // 5 MB minimum part size
 const URL_TTL = 300; // 5 minutes
-
-function json(statusCode, data) {
-  return {
-    statusCode,
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  };
-}
 
 function sanitizeFilename(name) {
   if (!name) return "unnamed";
@@ -55,23 +57,23 @@ async function handleSimpleUpload(session, filename, contentType) {
 
   const url = await getSignedUrl(s3, command, { expiresIn: URL_TTL });
 
-  return json(200, { url, fileId, userId: session.userId, key });
+  return simpleUploadResponse(url, fileId, session.userId, key);
 }
 
 async function handleMultipartInitiate(session, filename, contentType, fileSize, partSize) {
   if (!fileSize || fileSize <= 0) {
-    return json(400, { error: "Invalid fileSize" });
+    return badRequest("Invalid fileSize");
   }
 
   if (fileSize > MULTIPART_MAX_SIZE) {
-    return json(400, { error: `File size exceeds maximum of ${MULTIPART_MAX_SIZE / (1024 * 1024 * 1024)} GB` });
+    return badRequest(`File size exceeds maximum of ${MULTIPART_MAX_SIZE / (1024 * 1024 * 1024)} GB`);
   }
 
   const actualPartSize = partSize || DEFAULT_PART_SIZE;
   const numParts = Math.ceil(fileSize / actualPartSize);
 
   if (numParts > 10000) {
-    return json(400, { error: "Too many parts (max 10000)" });
+    return badRequest("Too many parts (max 10000)");
   }
 
   const { key, fileId } = await generateKey(session.userId, filename);
@@ -109,7 +111,7 @@ async function handleMultipartInitiate(session, filename, contentType, fileSize,
     });
   }
 
-  return json(200, {
+  return multipartInitiateResponse({
     uploadId,
     fileId,
     userId: session.userId,
@@ -123,7 +125,7 @@ async function handleMultipartInitiate(session, filename, contentType, fileSize,
 
 async function handleMultipartComplete(uploadId, key, parts) {
   if (!uploadId || !key || !parts || !Array.isArray(parts) || parts.length === 0) {
-    return json(400, { error: "Missing required fields: uploadId, key, parts" });
+    return badRequest("Missing required fields: uploadId, key, parts");
   }
 
   const sortedParts = parts
@@ -144,20 +146,20 @@ async function handleMultipartComplete(uploadId, key, parts) {
 
   await s3.send(completeCommand);
 
-  return json(200, { ok: true, key });
+  return multipartCompleteResponse(key);
 }
 
 export async function lambdaHandler(event) {
   try {
     const session = await requireAuth(event);
-    if (!session) return json(401, { error: "Unauthorized" });
+    if (!session) return unauthorized();
 
     const path = event.path || "";
     const method = event.httpMethod;
 
     if (path.endsWith("/upload/initiate") && method === "POST") {
       const { filename, contentType, fileSize, partSize } = JSON.parse(event.body || "{}");
-      if (!filename) return json(400, { error: "Missing filename" });
+      if (!filename) return badRequest("Missing filename");
       return await handleMultipartInitiate(session, filename, contentType, fileSize, partSize);
     }
 
@@ -168,13 +170,13 @@ export async function lambdaHandler(event) {
 
     if (path.endsWith("/upload") && method === "POST") {
       const { filename, contentType } = JSON.parse(event.body || "{}");
-      if (!filename) return json(400, { error: "Missing filename" });
+      if (!filename) return badRequest("Missing filename");
       return await handleSimpleUpload(session, filename, contentType);
     }
 
-    return json(404, { error: "Not found" });
+    return notFound();
   } catch (err) {
     console.error(JSON.stringify({ error: err.message }));
-    return json(500, { error: "Internal server error" });
+    return internalError();
   }
 }
