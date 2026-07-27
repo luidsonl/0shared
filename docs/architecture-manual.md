@@ -498,6 +498,7 @@ Auth is implemented as a stateful session system using DynamoDB.
 | GET | `/api/health` | No | Health check (DynamoDB + S3) |
 | POST | `/api/upload` | Bearer | Get presigned URL for file upload |
 | GET | `/api/download/{fileId}` | No | Get presigned URL for file download |
+| DELETE | `/api/files/{fileId}` | Bearer | Delete a file (owner only) |
 
 **Flow:** Login → bcrypt verify → create session in DynamoDB → return `{ token }`. Each protected call reads `SESSION#<token>` to validate. Logout deletes both `SESSION#<token>` records.
 

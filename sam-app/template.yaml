@@ -127,6 +127,24 @@ Resources:
         - LambdaInvokePolicy:
             FunctionName: !Ref InterfaceLambdaName
 
+  FilesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/handlers/
+      Handler: files.lambdaHandler
+      Events:
+        DeleteFile:
+          Type: Api
+          Properties:
+            Path: /api/files/{fileId}
+            Method: DELETE
+      Policies:
+        - CloudWatchPutMetricPolicy: {}
+        - S3CrudPolicy:
+            BucketName: !Ref FilesBucketName
+        - DynamoDBCrudPolicy:
+            TableName: !Ref DynamoDBTableName
+
 Outputs:
   ApiEndpoint:
     Description: "API Gateway endpoint URL (Prod stage)"
