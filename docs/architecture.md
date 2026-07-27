@@ -161,7 +161,7 @@ oac_name_suffix="-s3-oac"               ├── OAC           = 0shared-s3-oac
 |----------|---------|---------|
 | DynamoDB table | `{project_name}{env_under}{table_suffix}` | `0shared` |
 | Files S3 bucket | `{namespace}-{project_name}{env_dash}{files_bucket_suffix}` | `luidsonl-0shared-files` |
-| Upload SQS queue | `{project_name}{env_under}{queue_suffix}` | `0shared-upload` |
+| Upload SQS queue | `{project_name}{env_under}{queue_suffix}` | `0shared_upload` |
 | Frontend S3 bucket | `{namespace}-{project_name}{env_dash}{front_bucket_suffix}` | `luidsonl-0shared-front` |
 | CloudFront OAC | `{project_name}{env_dash}{oac_name_suffix}` | `0shared-s3-oac` |
 | SAM stack | `app-0shared-backend` (hardcoded in `samconfig.toml`) | `app-0shared-backend` |
@@ -195,7 +195,7 @@ Outputs:
   ApiEndpoint:
     Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/Prod"
     Export:
-      Name: sam-app-ApiEndpoint
+      Name: app-0shared-backend-ApiEndpoint
 ```
 
 Terraform reads the export in the frontend layer:
@@ -203,7 +203,7 @@ Terraform reads the export in the frontend layer:
 ```hcl
 # terraform/aws-frontend/main.tf
 data "aws_cloudformation_export" "api_url" {
-  name = "sam-app-ApiEndpoint"
+  name = "app-0shared-backend-ApiEndpoint"
 }
 ```
 
@@ -255,7 +255,7 @@ Step 2 → all stateful infra: DynamoDB table, S3 files bucket, SQS queues, DLQs
          event source mappings, FileIdIndex GSI
 Step 3 → reads table/bucket names from samconfig.toml, deploys API-triggered Lambdas,
          fetches download interface Lambda name from Terraform output
-Step 3 → exports API URL (sam-app-ApiEndpoint) → consumed by Step 4
+Step 3 → exports API URL (app-0shared-backend-ApiEndpoint) → consumed by Step 4
 Step 4 → reads the export, builds the SPA, uploads to S3, invalidates CloudFront
 ```
 

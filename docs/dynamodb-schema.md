@@ -93,7 +93,7 @@ None. The table's SK (range key) already supports `begins_with` and `between` qu
 
 | Index Name | Type | Hash Key | Range Key | Projection | Entity |
 |-----------|------|----------|-----------|------------|--------|
-| SubIndex | GSI | `sub` | (none) | `INCLUDE` (user_id, username) | User (unused — was for Cognito) |
+| SubIndex | GSI | `sub` | (none) | `INCLUDE` (user_id, username) | User (**unused** — legacy from Cognito, no items write a `sub` attribute) |
 | UsernameIndex | GSI | `username_lower` | (none) | `KEYS_ONLY` | User |
 | NameSearch | GSI | `gsiname_pk` | `gsiname_sk` | `KEYS_ONLY` | User, File |
 | UploadDateIndex | GSI | `gsidate_pk` | `gsidate_sk` | `KEYS_ONLY` | File |
@@ -204,6 +204,8 @@ Allows looking up a file by its ID alone, without knowing the owner. Used by the
 ### Unique Username Constraint
 
 Each username must be globally unique. Enforced via a **reservation item** + **DynamoDB TransactWriteItems** at account creation.
+
+> **Note:** The username reservation entity (`USERNAME#{username_lower}/RESERVED`) is defined in the schema but **not yet implemented** in `auth.mjs`. The current signup transaction only writes `USER#{userId}/PROFILE` + `EMAIL#{email}/METADATA`. This is a known gap.
 
 The username is set once during signup. It can be changed later, but the new value must also be globally unique.
 
