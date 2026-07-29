@@ -162,6 +162,11 @@ Resources:
           Properties:
             Path: /api/users/search
             Method: GET
+        GetUser:
+          Type: Api
+          Properties:
+            Path: /api/users/{userId}
+            Method: GET
 
 Outputs:
   ApiEndpoint:

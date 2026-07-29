@@ -7,6 +7,7 @@ import {
   unauthorized,
   internalError,
   userSearchResponse,
+  userResponse,
 } from "./lib/dto.mjs";
 
 export async function lambdaHandler(event) {
@@ -14,11 +15,25 @@ export async function lambdaHandler(event) {
     if (event.httpMethod === "GET" && event.path === "/api/users/search") {
       return handleSearch(event);
     }
+    if (event.httpMethod === "GET" && event.pathParameters?.userId) {
+      return handleGetUser(event);
+    }
     return notFound();
   } catch (err) {
     console.error(JSON.stringify({ error: err.message }));
     return internalError();
   }
+}
+
+async function handleGetUser(event) {
+  const session = await requireAuth(event);
+  if (!session) return unauthorized();
+
+  const userId = event.pathParameters.userId;
+  const user = await db.getUserById(userId);
+  if (!user) return notFound("User not found");
+
+  return userResponse(user.userId, user.username, user.createdAt);
 }
 
 async function handleSearch(event) {

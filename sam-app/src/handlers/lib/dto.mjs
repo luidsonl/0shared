@@ -87,3 +87,7 @@ export function fileDeletedResponse(fileId) {
 export function userSearchResponse(users, nextToken) {
   return ok({ users, nextToken });
 }
+
+export function userResponse(userId, username, createdAt) {
+  return ok({ userId, username, createdAt });
+}
