@@ -3,10 +3,12 @@ $(foreach v,$(RESOURCES),$(eval $(v)))
 
 export DYNAMODB_TABLE FILES_BUCKET STACK_NAME
 
-.PHONY: deploy start-api test test-aws clean
+.PHONY: build deploy start-api test test-aws clean
 
-deploy:
+build:
 	sam build
+
+deploy: build
 	@out=$$(sam deploy --parameter-overrides DynamoDBTableName=$(DYNAMODB_TABLE) FilesBucketName=$(FILES_BUCKET) InterfaceLambdaName=$(INTERFACE_LAMBDA_NAME) 2>&1); \
 	  if [ $$? -eq 0 ]; then echo "SAM deploy succeeded."; \
 	  elif echo "$$out" | grep -q "No changes to deploy"; then echo "SAM: stack up to date (no changes)."; \

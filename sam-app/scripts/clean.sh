@@ -30,9 +30,8 @@ done
 
 echo "=== DynamoDB: $TABLE ==="
 ITEMS=$(aws dynamodb scan --table-name "$TABLE" \
-  --attributes-to-get PK SK \
   --output json \
-  --query "Items[].[PK.S, SK.S]" 2>/dev/null) || {
+  --query "Items[].{PK:PK.S,SK:SK.S}" 2>/dev/null) || {
   echo "  Table not found. Skipping."
   ITEMS="[]"
 }
@@ -41,14 +40,25 @@ COUNT=$(echo "$ITEMS" | jq length)
 echo "  Items found: $COUNT"
 
 if [ "$COUNT" -gt 0 ] && [ "$DRY_RUN" = false ]; then
-  echo "$ITEMS" | jq -c '.[]' | while read -r item; do
-    PK=$(echo "$item" | jq -r '.[0]')
-    SK=$(echo "$item" | jq -r '.[1]')
-    aws dynamodb delete-item \
-      --table-name "$TABLE" \
-      --key "$(jq -n --arg pk "$PK" --arg sk "$SK" '{PK:{S:$pk}, SK:{S:$sk}}')" \
-      --output text > /dev/null 2>&1
-  done
+  echo "$ITEMS" | python3 -c '
+import json, os, subprocess, sys
+table = os.environ["DYNAMODB_TABLE"]
+items = json.load(sys.stdin)
+total = len(items)
+deleted = 0
+batch = []
+for i, item in enumerate(items, 1):
+    batch.append({"DeleteRequest": {"Key": {"PK": {"S": item["PK"]}, "SK": {"S": item["SK"]}}}})
+    if len(batch) == 25 or i == total:
+        body = json.dumps({"RequestItems": {table: batch}})
+        result = subprocess.run(["aws", "dynamodb", "batch-write-item", "--cli-input-json", body, "--output", "text"], capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f"  Error on batch: {result.stderr.strip()}", file=sys.stderr)
+            sys.exit(1)
+        deleted += len(batch)
+        print(f"  Deleted {deleted}/{total}")
+        batch = []
+'
   echo "  Cleanup complete."
 elif [ "$DRY_RUN" = true ]; then
   echo "  [DRY-RUN] Nothing was deleted."
