@@ -18,7 +18,7 @@ start-api:
 	sam local start-api --env-vars env.json --host 0.0.0.0
 
 test:
-	npm test
+	@if [ -n "$(FILTER)" ]; then npm test -- --grep "$(FILTER)"; else npm test; fi
 
 test-aws:
 	API_ENDPOINT=$$(aws cloudformation describe-stacks \
