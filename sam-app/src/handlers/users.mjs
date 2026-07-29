@@ -8,12 +8,17 @@ import {
   internalError,
   userSearchResponse,
   userResponse,
+  fileListResponse,
+  fileItemResponse,
 } from "./lib/dto.mjs";
 
 export async function lambdaHandler(event) {
   try {
     if (event.httpMethod === "GET" && event.path === "/api/users/search") {
       return handleSearch(event);
+    }
+    if (event.httpMethod === "GET" && event.resource === "/api/users/{userId}/files") {
+      return handleListFiles(event);
     }
     if (event.httpMethod === "GET" && event.pathParameters?.userId) {
       return handleGetUser(event);
@@ -34,6 +39,29 @@ async function handleGetUser(event) {
   if (!user) return notFound("User not found");
 
   return userResponse(user.userId, user.username, user.createdAt);
+}
+
+async function handleListFiles(event) {
+  const session = await requireAuth(event);
+  if (!session) return unauthorized();
+
+  const userId = event.pathParameters.userId;
+  const params = event.queryStringParameters || {};
+  const limit = Math.min(Math.max(parseInt(params.limit, 10) || 20, 1), 100);
+  const sortBy = ["name", "downloadCount", "uploadDate"].includes(params.sortBy) ? params.sortBy : "uploadDate";
+  const sortOrder = ["asc", "desc"].includes(params.sortOrder) ? params.sortOrder : "desc";
+  const exclusiveStartKey = params.nextToken
+    ? JSON.parse(Buffer.from(params.nextToken, "base64").toString("utf-8"))
+    : undefined;
+
+  const result = await db.listUserFiles(userId, limit, exclusiveStartKey, sortBy, sortOrder);
+
+  const nextToken = result.LastEvaluatedKey
+    ? Buffer.from(JSON.stringify(result.LastEvaluatedKey)).toString("base64")
+    : null;
+
+  const files = (result.Items || []).map(fileItemResponse);
+  return fileListResponse(files, nextToken);
 }
 
 async function handleSearch(event) {

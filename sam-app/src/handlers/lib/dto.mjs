@@ -91,3 +91,18 @@ export function userSearchResponse(users, nextToken) {
 export function userResponse(userId, username, createdAt) {
   return ok({ userId, username, createdAt });
 }
+
+export function fileListResponse(files, nextToken) {
+  return ok({ files, nextToken });
+}
+
+export function fileItemResponse(item) {
+  return {
+    fileId: item.file_id,
+    name: item.name,
+    size: item.size,
+    contentType: item.content_type,
+    uploadDate: item.upload_date,
+    downloadCount: item.download_count,
+  };
+}

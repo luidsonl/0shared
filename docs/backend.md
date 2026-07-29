@@ -21,6 +21,7 @@ The backend is a set of stateless Lambda functions deployed via AWS SAM and expo
 | `GET` | `/api/download/:fileId` | `download.mjs` | No | Generate presigned S3 download URL |
 | `GET` | `/api/users/search` | `users.mjs` | Yes | Search users by username prefix |
 | `GET` | `/api/users/:userId` | `users.mjs` | Yes | Get user profile by ID |
+| `GET` | `/api/users/:userId/files` | `users.mjs` | Yes | List user uploads — paginated, sortable (`sortBy`: `uploadDate`\|`name`\|`downloadCount`, `sortOrder`: `asc`\|`desc`) |
 | `DELETE` | `/api/files/:fileId` | `files.mjs` | Yes | Delete a file (owner only) |
 
 ---

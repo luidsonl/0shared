@@ -167,6 +167,11 @@ Resources:
           Properties:
             Path: /api/users/{userId}
             Method: GET
+        ListUserFiles:
+          Type: Api
+          Properties:
+            Path: /api/users/{userId}/files
+            Method: GET
 
 Outputs:
   ApiEndpoint:

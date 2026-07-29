@@ -137,6 +137,34 @@ export async function deleteSession(token) {
   }));
 }
 
+export async function listUserFiles(userId, limit, exclusiveStartKey, sortBy = "uploadDate", sortOrder = "desc") {
+  const params = {
+    TableName: TABLE,
+    KeyConditionExpression: "PK = :pk AND begins_with(SK, :skPrefix)",
+    ExpressionAttributeValues: {
+      ":pk": `USER#${userId}`,
+      ":skPrefix": "FILE#",
+    },
+    Limit: limit,
+  };
+  if (exclusiveStartKey) {
+    params.ExclusiveStartKey = exclusiveStartKey;
+  }
+  const result = await doc.send(new QueryCommand(params));
+  const sorted = (result.Items || []).sort((a, b) => {
+    const dir = sortOrder === "asc" ? 1 : -1;
+    switch (sortBy) {
+      case "name":
+        return dir * a.name.localeCompare(b.name);
+      case "downloadCount":
+        return dir * ((a.download_count || 0) - (b.download_count || 0));
+      default:
+        return dir * a.upload_date.localeCompare(b.upload_date);
+    }
+  });
+  return { Items: sorted, LastEvaluatedKey: result.LastEvaluatedKey };
+}
+
 export async function searchUsers(queryPrefix, limit, exclusiveStartKey) {
   const params = {
     TableName: TABLE,
