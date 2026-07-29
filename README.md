@@ -22,7 +22,7 @@ The frontend is a React + Vite single-page application served as static files.
 The application uses Amazon DynamoDB with a **Single-Table Design** provisioned as `PAY_PER_REQUEST`.
 * **Table**: `0shared`
 * **Attributes**: `PK` (Partition Key), `SK` (Sort Key)
-* **Global Secondary Indexes**: `FileIdIndex`, `NameSearch`, `UploadDateIndex`, `DownloadCountIndex`, `UsernameIndex`, `SubIndex` (unused)
+* **Global Secondary Indexes**: `FileIdIndex`, `NameSearch`, `UserFileDateIndex`, `UserFileNameIndex`, `UserFileDownloadIndex`, `UsernameIndex`, `SubIndex` (unused), `UploadDateIndex` (unused), `DownloadCountIndex` (unused)
 
 ### 4. Backend & API (AWS SAM)
 The backend is managed separately from Terraform using **AWS SAM**.

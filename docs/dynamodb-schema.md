@@ -96,8 +96,11 @@ None. The table's SK (range key) already supports `begins_with` and `between` qu
 | SubIndex | GSI | `sub` | (none) | `INCLUDE` (user_id, username) | User (**unused** — legacy from Cognito, no items write a `sub` attribute) |
 | UsernameIndex | GSI | `username_lower` | (none) | `KEYS_ONLY` | User |
 | NameSearch | GSI | `gsiname_pk` | `gsiname_sk` | `KEYS_ONLY` | User, File |
-| UploadDateIndex | GSI | `gsidate_pk` | `gsidate_sk` | `KEYS_ONLY` | File |
-| DownloadCountIndex | GSI | `gsidown_pk` | `gsidown_sk` | `KEYS_ONLY` | File |
+| UploadDateIndex | GSI | `gsidate_pk` | `gsidate_sk` | `KEYS_ONLY` | File (**unused** — kept for backward compat; replaced by UserFileDateIndex) |
+| DownloadCountIndex | GSI | `gsidown_pk` | `gsidown_sk` | `KEYS_ONLY` | File (**unused** — kept for backward compat; replaced by UserFileDownloadIndex) |
+| UserFileDateIndex | GSI | `owner_user_id` | `gsidate_sk` | `ALL` | File |
+| UserFileNameIndex | GSI | `owner_user_id` | `gsiname_sk` | `ALL` | File |
+| UserFileDownloadIndex | GSI | `owner_user_id` | `gsidown_sk` | `ALL` | File |
 | FileIdIndex | GSI | `file_id` | (none) | `ALL` | File |
 
 ### EmailIndex - Lookup user by email
@@ -168,6 +171,48 @@ File names are sharded by first character hex (`NAME#FILE#6a`, `NAME#FILE#72`) t
 
 > `download_count` must be stored zero-padded to 10 digits (e.g., `0000000042`) for correct lexicographic ordering.
 
+### UserFileDateIndex — List user's files sorted by upload date
+
+| Key | Type | Value |
+|-----|------|-------|
+| `owner_user_id` | HASH | Owner's stable user ID |
+| `gsidate_sk` | RANGE | `{upload_date}#{file_id}` |
+
+Unlike the global `UploadDateIndex`, this GSI is scoped to a single user. `ScanIndexForward=false` returns newest files first.
+
+| owner_user_id | gsidate_sk |
+|---------------|------------|
+| uuid-1 | 2026-06-18T10:30:00Z#file-uuid-1 |
+| uuid-1 | 2026-06-18T14:20:00Z#file-uuid-2 |
+
+### UserFileNameIndex — List user's files sorted by name
+
+| Key | Type | Value |
+|-----|------|-------|
+| `owner_user_id` | HASH | Owner's stable user ID |
+| `gsiname_sk` | RANGE | `{name_lower}#{file_id}` |
+
+`ScanIndexForward=true` returns files in A→Z order.
+
+| owner_user_id | gsiname_sk |
+|---------------|------------|
+| uuid-1 | foto.png#file-uuid-2 |
+| uuid-1 | relatorio.pdf#file-uuid-1 |
+
+### UserFileDownloadIndex — List user's files sorted by download count
+
+| Key | Type | Value |
+|-----|------|-------|
+| `owner_user_id` | HASH | Owner's stable user ID |
+| `gsidown_sk` | RANGE | `{download_count_padded}#{file_id}` |
+
+`ScanIndexForward=false` returns most-downloaded files first.
+
+| owner_user_id | gsidown_sk |
+|---------------|------------|
+| uuid-1 | 0000000042#file-uuid-1 |
+| uuid-1 | 0000000128#file-uuid-2 |
+
 ### FileIdIndex - Lookup file by ID (for public downloads)
 
 | Key | Type | Value |
@@ -186,10 +231,12 @@ Allows looking up a file by its ID alone, without knowing the owner. Used by the
 ## Access Patterns
 
 | # | Query | Index | Key Condition |
-|---|-------|-------|---------------|
+|--|-------|-------|---------------|
 | 1 | Get user by username | UsernameIndex | `username_lower = {lower(username)}` → `get_item(PK=USER#{user_id}, SK=USER#PROFILE)` |
 | 2 | Get user by email | -- | `GetItem(PK=EMAIL#<email>, SK=METADATA)` → `GetItem(PK=USER#{user_id}, SK=PROFILE)` |
-| 3 | List user's files | -- | `query(PK=USER#{user_id}, begins_with(SK, FILE#))` |
+| 3 | List user's files (by date) | UserFileDateIndex | `owner_user_id = :userId, scan_forward=false` |
+| 3a | List user's files (by name asc) | UserFileNameIndex | `owner_user_id = :userId, scan_forward=true` |
+| 3b | List user's files (by downloads desc) | UserFileDownloadIndex | `owner_user_id = :userId, scan_forward=false` |
 | 4 | List all users | NameSearch | `gsiname_pk = NAME#USER` |
 | 5 | Search users by username | NameSearch | `gsiname_pk = NAME#USER, begins_with(gsiname_sk, {prefix})` |
 | 6 | Search files by name | NameSearch | `gsiname_pk = NAME#FILE#{shard}, begins_with(gsiname_sk, {prefix})` |

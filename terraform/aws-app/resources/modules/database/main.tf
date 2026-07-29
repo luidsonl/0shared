@@ -52,6 +52,10 @@ resource "aws_dynamodb_table" "this" {
     name = "file_id"
     type = "S"
   }
+  attribute {
+    name = "owner_user_id"
+    type = "S"
+  }
 
   global_secondary_index {
     name               = "SubIndex"
@@ -86,6 +90,27 @@ resource "aws_dynamodb_table" "this" {
     projection_type = "KEYS_ONLY"
     hash_key = "gsidown_pk"
     range_key = "gsidown_sk"
+  }
+
+  global_secondary_index {
+    name            = "UserFileDateIndex"
+    hash_key        = "owner_user_id"
+    range_key       = "gsidate_sk"
+    projection_type = "ALL"
+  }
+
+  global_secondary_index {
+    name            = "UserFileNameIndex"
+    hash_key        = "owner_user_id"
+    range_key       = "gsiname_sk"
+    projection_type = "ALL"
+  }
+
+  global_secondary_index {
+    name            = "UserFileDownloadIndex"
+    hash_key        = "owner_user_id"
+    range_key       = "gsidown_sk"
+    projection_type = "ALL"
   }
 
   global_secondary_index {

@@ -49,20 +49,23 @@ async function uploadFile(userId, token, filename, content) {
 function makeFileItem(userId, overrides = {}) {
   const fileId = overrides.file_id || randomId();
   const uploadDate = overrides.upload_date || new Date().toISOString();
+  const name = overrides.name || "test.txt";
   return {
     PK: `USER#${userId}`,
     SK: `FILE#${fileId}`,
     file_id: fileId,
     owner_user_id: userId,
     owner_username: overrides.owner_username || "testuser",
-    name: overrides.name || "test.txt",
-    name_lower: (overrides.name || "test.txt").toLowerCase(),
+    name: name,
+    name_lower: name.toLowerCase(),
     size: overrides.size || 100,
     content_type: overrides.content_type || "text/plain",
     upload_date: uploadDate,
     download_count: overrides.download_count || 0,
     gsidate_pk: "FILE#DATE",
     gsidate_sk: `${uploadDate}#${fileId}`,
+    gsiname_pk: `NAME#FILE#${fileId.slice(0, 2).toLowerCase()}`,
+    gsiname_sk: `${name.toLowerCase()}#${fileId}`,
     gsidown_pk: "FILE#DOWN",
     gsidown_sk: `${String(overrides.download_count || 0).padStart(10, "0")}#${fileId}`,
   };
