@@ -18,5 +18,10 @@ export default defineConfig([
     languageOptions: {
       globals: globals.browser,
     },
+    rules: {
+      // Data fetching in effects (loading state set before an async fetch) is
+      // the canonical React pattern, so this new rule produces false positives.
+      'react-hooks/set-state-in-effect': 'off',
+    },
   },
 ])

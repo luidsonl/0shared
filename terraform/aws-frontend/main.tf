@@ -138,6 +138,22 @@ resource "aws_cloudfront_distribution" "main" {
 
   price_class = "PriceClass_100"
 
+  # Serve index.html for any path not found in S3 so client-side routing
+  # (e.g. /users/:userId, /search) works on refresh and deep links.
+  # With OAC the bucket has no ListBucket permission, so S3 answers 403
+  # (not 404) for missing keys - both must be handled.
+  custom_error_response {
+    error_code         = 403
+    response_code      = 200
+    response_page_path = "/index.html"
+  }
+
+  custom_error_response {
+    error_code         = 404
+    response_code      = 200
+    response_page_path = "/index.html"
+  }
+
   restrictions {
     geo_restriction {
       restriction_type = "none"
@@ -165,9 +181,11 @@ resource "null_resource" "frontend_deploy" {
   triggers = {
     build_hash = sha1(join("|", concat(
       [for f in fileset("${path.module}/../../frontend/src", "**/*") : filemd5("${path.module}/../../frontend/src/${f}")],
+      [for f in fileset("${path.module}/../../frontend/public", "**/*") : filemd5("${path.module}/../../frontend/public/${f}")],
       [
         filemd5("${path.module}/../../frontend/package.json"),
         filemd5("${path.module}/../../frontend/vite.config.ts"),
+        filemd5("${path.module}/../../frontend/index.html"),
       ]
     )))
   }

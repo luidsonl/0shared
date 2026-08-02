@@ -104,7 +104,19 @@ npm run dev
 
 Vite dev server runs at `http://localhost:5173` with HMR.
 
-**API proxy:** The Vite config does NOT include a proxy for `/api/*`. In local dev, the API runs separately (via `sam local start-api` at `:3000`). The frontend would need to be configured to hit the local API directly, or a proxy can be added to `vite.config.ts`.
+**API proxy:** `vite.config.ts` proxies `/api/*` to the backend. The target is read from the `VITE_API_BASE` env var:
+
+- `.env.local` (gitignored) → points at the deployed CloudFront domain, so the dev server hits the real AWS backend. CloudFront stays valid across backend redeploys.
+- `.env.example` (committed) → documents the variable. Copy it to `.env.local` and edit as needed.
+- Unset/blank → falls back to `http://127.0.0.1:3000` for `sam local start-api`.
+
+Example:
+
+```bash
+cd frontend
+cp .env.example .env.local   # then edit VITE_API_BASE if needed
+npm run dev
+```
 
 ### Production Build
 
@@ -149,7 +161,7 @@ Runs all four layers: bootstrap → infra → backend → frontend. The frontend
 <script type="module" src="/src/main.tsx"></script>
 ```
 
-This pattern enables injecting runtime environment variables (e.g., API base URL) without rebuilding. The file does not exist yet — it can be created at deploy time or via the Terraform upload step.
+`public/env.js` ships with an empty default (`window.__ENV__ = window.__ENV__ || {}`). The API client (`src/api/client.ts`) reads `window.__ENV__.API_BASE` and falls back to relative `/api` paths. In production the SPA and API share the CloudFront domain (same-origin), so no value is needed. In local dev the Vite proxy (see above) handles routing instead.
 
 ---
 
