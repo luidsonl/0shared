@@ -12,7 +12,7 @@ TF          ?= terraform
 STACK_NAME  ?= app-0shared-backend
 REGION      ?= us-east-1
 
-.PHONY: all deploy deploy-full bootstrap infra backend frontend build-frontend redeploy-api destroy destroy-frontend
+.PHONY: all deploy deploy-full bootstrap infra backend frontend build-frontend destroy destroy-backend destroy-frontend
 
 all: deploy
 
@@ -36,24 +36,10 @@ infra:
 	cd terraform/aws-app && $(TF) init -input=false && $(TF) apply -auto-approve
 
 # 3. Backend (Lambda + API Gateway)
+# INTERFACE_LAMBDA_NAME is auto-derived inside sam-app/Makefile (Terraform output).
+# `make deploy` also forces a fresh API Gateway deployment (SAM "empty deployment" race).
 backend:
-	$(eval INTERFACE_LAMBDA_NAME := $(shell cd terraform/aws-app && $(TF) output -raw download_interface_lambda_name))
-	cd sam-app && $(MAKE) deploy INTERFACE_LAMBDA_NAME=$(INTERFACE_LAMBDA_NAME)
-	$(MAKE) redeploy-api
-
-# Workaround for the SAM "empty deployment" race: force a fresh deployment
-# so the Prod stage actually exposes the routes (avoids "Missing Authentication Token").
-redeploy-api:
-	@REST_API_ID=$$(aws cloudformation describe-stack-resource \
-		--stack-name $(STACK_NAME) \
-		--logical-resource-id ServerlessRestApi \
-		--query "StackResourceDetail.PhysicalResourceId" \
-		--output text --region $(REGION)); \
-	echo "Forcing fresh API Gateway deployment for $$REST_API_ID"; \
-	aws apigateway create-deployment \
-		--rest-api-id $$REST_API_ID \
-		--stage-name Prod \
-		--region $(REGION) >/dev/null
+	cd sam-app && $(MAKE) deploy
 
 # 4. Frontend (build → S3 + CloudFront upload/invalidate)
 frontend: build-frontend
@@ -64,10 +50,12 @@ build-frontend:
 	cd frontend && npm install && npm run build
 
 # ── Teardown (reverse order) ─────────────────────────────────────────────────
-destroy: destroy-frontend
-	-sam delete --stack-name $(STACK_NAME) --region $(REGION) --no-prompt
+destroy: destroy-frontend destroy-backend
 	cd terraform/aws-app && $(TF) destroy -auto-approve
 	cd terraform/aws-bootstrap && $(TF) destroy -auto-approve
+
+destroy-backend:
+	-sam delete --stack-name $(STACK_NAME) --region $(REGION) --no-prompts
 
 destroy-frontend:
 	cd terraform/aws-frontend && $(TF) destroy -auto-approve

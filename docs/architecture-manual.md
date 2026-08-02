@@ -215,13 +215,15 @@ Parameters:
 sam build && sam deploy
 ```
 
-The values live in `sam-app/samconfig.toml` (`parameter_overrides`) and are kept in sync with `resources.env`. For another environment, override on the command line:
+The values live in `sam-app/resources.env` and are passed to SAM automatically by `sam-app/Makefile` (`sam deploy --parameter-overrides`), with `InterfaceLambdaName` derived from the live Terraform output. For another environment, override on the command line:
 
 ```bash
 sam deploy --parameter-overrides \
   DynamoDBTableName=staging_table \
   FilesBucketName=staging-bucket
 ```
+
+`make deploy` (in `sam-app/`) runs `sam build`, `sam deploy`, and then forces a fresh API Gateway deployment so the Prod stage exposes the routes (SAM "empty deployment" race workaround).
 
 ---
 
@@ -249,6 +251,12 @@ Step 4 → reads the export, builds the SPA, uploads to S3, invalidates CloudFro
 ### Deploy Commands
 
 ```bash
+# Full orchestration (recommended — no manual parameters):
+make backend      # Step 3 only: rebuilds + redeploys the API backend (auto-derives parameters)
+make frontend     # Step 4 only: re-applies frontend so CloudFront follows the new API URL
+make destroy-backend  # Teardown of the SAM backend stack only
+
+# Or step by step:
 # Step 1 — one-time (S3 state bucket)
 cd terraform/aws-bootstrap && terraform init && terraform apply
 
@@ -256,14 +264,17 @@ cd terraform/aws-bootstrap && terraform init && terraform apply
 cd terraform/aws-app && terraform init && terraform apply
 
 # Step 3 — API-triggered Lambdas + API Gateway (exports app-0shared-backend-ApiEndpoint)
-cd sam-app && sam build && sam deploy
+cd sam-app && make deploy
 
 # Step 4 — S3 + CloudFront + frontend build/upload
 cd terraform/aws-frontend && terraform init && terraform apply
 ```
 
-> `sam deploy` reads resource names from `samconfig.toml`, whose `parameter_overrides`
-> must match `resources.env`. The `aws-frontend` apply blocks until the SAM export exists.
+> `make deploy` in `sam-app/` reads resource names from `resources.env` and derives
+> `InterfaceLambdaName` from the Terraform output — no parameters needed. It also forces a
+> fresh API Gateway deployment after `sam deploy`. The `aws-frontend` apply blocks until the
+> SAM export exists; after a backend destroy/recreate the API URL changes, so re-run
+> `make frontend` to repoint the CloudFront origin.
 
 ---
 
@@ -480,7 +491,7 @@ Dependencies flow forward, so destroy must happen in reverse.
 
 1. Add a new `aws_dynamodb_table` resource in `terraform/aws-app/resources/modules/database/main.tf`
 2. Export the table name as a Terraform output
-3. Pass it to SAM via `--parameter-overrides`
+3. Pass it to SAM via `--parameter-overrides` (auto-derived in `sam-app/Makefile`)
 4. Add IAM permissions in SAM (`DynamoDBCrudPolicy`)
 
 ### Adding Authentication

@@ -133,6 +133,11 @@ Resources:
       CodeUri: src/handlers/
       Handler: files.lambdaHandler
       Events:
+        ListFiles:
+          Type: Api
+          Properties:
+            Path: /api/files
+            Method: GET
         DeleteFile:
           Type: Api
           Properties:

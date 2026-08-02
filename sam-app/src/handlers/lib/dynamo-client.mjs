@@ -6,6 +6,7 @@ import {
   DeleteCommand,
   TransactWriteCommand,
   QueryCommand,
+  BatchGetCommand,
 } from "@aws-sdk/lib-dynamodb";
 
 const client = new DynamoDBClient({});
@@ -135,6 +136,56 @@ export async function deleteSession(token) {
       },
     ],
   }));
+}
+
+async function batchGetItems(keys) {
+  if (keys.length === 0) return [];
+
+  const batch = keys.slice(0, 100).map((key) => ({ PK: key.PK, SK: key.SK }));
+  const orderedIds = batch.map((key) => `${key.PK}#${key.SK}`);
+  const found = [];
+
+  let request = { [TABLE]: { Keys: batch } };
+  for (let attempt = 0; attempt < 10 && request?.[TABLE]?.Keys?.length; attempt++) {
+    const result = await doc.send(new BatchGetCommand({ RequestItems: request }));
+    found.push(...(result.Responses?.[TABLE] || []));
+    request = result.UnprocessedKeys;
+    if (request?.[TABLE]?.Keys?.length) {
+      await new Promise((resolve) => setTimeout(resolve, 50 * (attempt + 1)));
+    }
+  }
+
+  const foundByKey = new Map(found.map((item) => [`${item.PK}#${item.SK}`, item]));
+  return orderedIds
+    .map((id) => foundByKey.get(id))
+    .filter(Boolean);
+}
+
+export async function listAllFiles(limit, exclusiveStartKey, sortBy = "downloadCount", sortOrder = "desc") {
+  const indexMap = {
+    downloadCount: { index: "DownloadCountIndex", hash: "gsidown_pk", value: "FILE#DOWN" },
+    uploadDate: { index: "UploadDateIndex", hash: "gsidate_pk", value: "FILE#DATE" },
+  };
+
+  const config = indexMap[sortBy] || indexMap.downloadCount;
+
+  const params = {
+    TableName: TABLE,
+    IndexName: config.index,
+    KeyConditionExpression: `${config.hash} = :pk`,
+    ExpressionAttributeValues: {
+      ":pk": config.value,
+    },
+    Limit: limit,
+    ScanIndexForward: sortOrder === "asc",
+  };
+  if (exclusiveStartKey) {
+    params.ExclusiveStartKey = exclusiveStartKey;
+  }
+
+  const result = await doc.send(new QueryCommand(params));
+  const items = await batchGetItems(result.Items || []);
+  return { Items: items, LastEvaluatedKey: result.LastEvaluatedKey };
 }
 
 export async function listUserFiles(userId, limit, exclusiveStartKey, sortBy = "uploadDate", sortOrder = "desc") {

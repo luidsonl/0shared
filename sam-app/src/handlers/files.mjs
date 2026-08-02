@@ -2,6 +2,7 @@ import { S3Client, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, QueryCommand, DeleteCommand } from "@aws-sdk/lib-dynamodb";
 import { requireAuth } from "./middleware/auth.mjs";
+import * as db from "./lib/dynamo-client.mjs";
 import {
   json,
   badRequest,
@@ -11,6 +12,8 @@ import {
   methodNotAllowed,
   internalError,
   fileDeletedResponse,
+  fileListResponse,
+  publicFileItemResponse,
 } from "./lib/dto.mjs";
 
 const s3 = new S3Client({});
@@ -53,8 +56,28 @@ async function deleteFile(event) {
   return fileDeletedResponse(fileId);
 }
 
+async function listFiles(event) {
+  const params = event.queryStringParameters || {};
+  const limit = Math.min(Math.max(parseInt(params.limit, 10) || 20, 1), 100);
+  const sortBy = ["downloadCount", "uploadDate"].includes(params.sortBy) ? params.sortBy : "downloadCount";
+  const sortOrder = ["asc", "desc"].includes(params.sortOrder) ? params.sortOrder : "desc";
+  const exclusiveStartKey = params.nextToken
+    ? JSON.parse(Buffer.from(params.nextToken, "base64").toString("utf-8"))
+    : undefined;
+
+  const result = await db.listAllFiles(limit, exclusiveStartKey, sortBy, sortOrder);
+
+  const nextToken = result.LastEvaluatedKey
+    ? Buffer.from(JSON.stringify(result.LastEvaluatedKey)).toString("base64")
+    : null;
+
+  const files = (result.Items || []).map(publicFileItemResponse);
+  return fileListResponse(files, nextToken);
+}
+
 export async function lambdaHandler(event) {
   try {
+    if (event.httpMethod === "GET" && event.resource === "/api/files") return listFiles(event);
     if (event.httpMethod === "DELETE") return deleteFile(event);
     return methodNotAllowed();
   } catch (err) {

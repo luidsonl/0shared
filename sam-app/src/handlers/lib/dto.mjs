@@ -106,3 +106,16 @@ export function fileItemResponse(item) {
     downloadCount: item.download_count,
   };
 }
+
+export function publicFileItemResponse(item) {
+  return {
+    fileId: item.file_id,
+    name: item.name,
+    size: item.size,
+    contentType: item.content_type,
+    uploadDate: item.upload_date,
+    downloadCount: item.download_count,
+    ownerId: item.owner_user_id,
+    ownerUsername: item.owner_username,
+  };
+}

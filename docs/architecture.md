@@ -228,7 +228,7 @@ Parameters:
     Type: String
 ```
 
-The values live in `sam-app/samconfig.toml` (`parameter_overrides`) and are kept in sync with `resources.env`. For another environment, override on the command line:
+The values live in `sam-app/resources.env` and are kept in sync with `sam-app/samconfig.toml`. They are passed to SAM automatically by `sam-app/Makefile` (`sam deploy --parameter-overrides`), with `InterfaceLambdaName` derived from the live Terraform output (`terraform output -raw download_interface_lambda_name`) so no parameters are needed on the command line. For another environment, override on the command line:
 
 ```bash
 sam deploy --parameter-overrides \

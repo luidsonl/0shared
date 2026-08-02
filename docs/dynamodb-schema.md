@@ -96,8 +96,8 @@ None. The table's SK (range key) already supports `begins_with` and `between` qu
 | SubIndex | GSI | `sub` | (none) | `INCLUDE` (user_id, username) | User (**unused** — legacy from Cognito, no items write a `sub` attribute) |
 | UsernameIndex | GSI | `username_lower` | (none) | `KEYS_ONLY` | User |
 | NameSearch | GSI | `gsiname_pk` | `gsiname_sk` | `KEYS_ONLY` | User, File |
-| UploadDateIndex | GSI | `gsidate_pk` | `gsidate_sk` | `KEYS_ONLY` | File (**unused** — kept for backward compat; replaced by UserFileDateIndex) |
-| DownloadCountIndex | GSI | `gsidown_pk` | `gsidown_sk` | `KEYS_ONLY` | File (**unused** — kept for backward compat; replaced by UserFileDownloadIndex) |
+| UploadDateIndex | GSI | `gsidate_pk` | `gsidate_sk` | `KEYS_ONLY` | File |
+| DownloadCountIndex | GSI | `gsidown_pk` | `gsidown_sk` | `KEYS_ONLY` | File |
 | UserFileDateIndex | GSI | `owner_user_id` | `gsidate_sk` | `ALL` | File |
 | UserFileNameIndex | GSI | `owner_user_id` | `gsiname_sk` | `ALL` | File |
 | UserFileDownloadIndex | GSI | `owner_user_id` | `gsidown_sk` | `ALL` | File |
@@ -147,6 +147,8 @@ File names are sharded by first character hex (`NAME#FILE#6a`, `NAME#FILE#72`) t
 
 ### UploadDateIndex - Files by upload date
 
+Used by the public `GET /api/files?sortBy=uploadDate` endpoint. Projection is `KEYS_ONLY`, so the handler queries this index for ordering + pagination, then `BatchGetItem`s the full file entities by PK/SK.
+
 | Key | Type | Value |
 |-----|------|-------|
 | `gsidate_pk` | HASH | `FILE#DATE` |
@@ -158,6 +160,8 @@ File names are sharded by first character hex (`NAME#FILE#6a`, `NAME#FILE#72`) t
 | FILE#DATE | 2026-06-18T14:20:00Z#file-uuid |
 
 ### DownloadCountIndex - Files by popularity
+
+Used by the public `GET /api/files` endpoint (default sort). Projection is `KEYS_ONLY`, so the handler queries this index for ordering + pagination, then `BatchGetItem`s the full file entities by PK/SK.
 
 | Key | Type | Value |
 |-----|------|-------|
@@ -240,8 +244,8 @@ Allows looking up a file by its ID alone, without knowing the owner. Used by the
 | 4 | List all users | NameSearch | `gsiname_pk = NAME#USER` |
 | 5 | Search users by username | NameSearch | `gsiname_pk = NAME#USER, begins_with(gsiname_sk, {prefix})` |
 | 6 | Search files by name | NameSearch | `gsiname_pk = NAME#FILE#{shard}, begins_with(gsiname_sk, {prefix})` |
-| 7 | Filter files by date | UploadDateIndex | `gsidate_pk = FILE#DATE, between({start}, {end})` |
-| 8 | Top downloaded files | DownloadCountIndex | `gsidown_pk = FILE#DOWN, scan_forward=false` |
+| 7 | List all files by upload date | UploadDateIndex | `gsidate_pk = FILE#DATE, scan_forward=false` → `BatchGetItem` full entities |
+| 8 | List most downloaded files | DownloadCountIndex | `gsidown_pk = FILE#DOWN, scan_forward=false` → `BatchGetItem` full entities |
 | 9 | Get file by ID | FileIdIndex | `file_id = :fileId` → returns file item with all attributes |
 
 ---
