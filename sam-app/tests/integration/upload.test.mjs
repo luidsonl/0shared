@@ -5,7 +5,7 @@ import {
   GetCommand,
 } from "@aws-sdk/lib-dynamodb";
 import { S3Client, HeadObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
-import { api, randomId, sleep } from "./helpers.mjs";
+import { api, randomId, sleep, purgeUser } from "./helpers.mjs";
 
 const TABLE = process.env.DYNAMODB_TABLE || "0shared";
 const BUCKET = process.env.FILES_BUCKET || "luidsonl-0shared-files";
@@ -36,6 +36,7 @@ describe("Upload API", () => {
 
   after(async () => {
     if (token) await api("POST", "/api/auth/logout", null, token);
+    await purgeUser(userId, user.email, [token]);
   });
 
   describe("POST /api/upload", () => {

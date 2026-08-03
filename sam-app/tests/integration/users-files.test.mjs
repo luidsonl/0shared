@@ -7,7 +7,7 @@ import {
   DeleteCommand,
 } from "@aws-sdk/lib-dynamodb";
 import { S3Client, HeadObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
-import { api, randomId, sleep } from "./helpers.mjs";
+import { api, randomId, sleep, purgeUser } from "./helpers.mjs";
 
 const TABLE = process.env.DYNAMODB_TABLE || "0shared";
 const BUCKET = process.env.FILES_BUCKET || "luidsonl-0shared-files";
@@ -92,16 +92,9 @@ describe("Users API — List files", function () {
   });
 
   after(async function () {
-    this.timeout(30000);
+    this.timeout(60000);
     for (const u of TEST_USERS) {
-      await dynamo.send(new DeleteCommand({
-        TableName: TABLE,
-        Key: { PK: `USER#${u.userId}`, SK: "PROFILE" },
-      })).catch(() => {});
-      await dynamo.send(new DeleteCommand({
-        TableName: TABLE,
-        Key: { PK: `EMAIL#${u.email}`, SK: "METADATA" },
-      })).catch(() => {});
+      await purgeUser(u.userId, u.email, [u.token]);
     }
   });
 

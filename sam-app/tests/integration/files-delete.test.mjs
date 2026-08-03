@@ -7,7 +7,7 @@ import {
   DeleteCommand,
 } from "@aws-sdk/lib-dynamodb";
 import { S3Client, PutObjectCommand, HeadObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
-import { api, randomId } from "./helpers.mjs";
+import { api, randomId, purgeUser } from "./helpers.mjs";
 
 const TABLE = process.env.DYNAMODB_TABLE || "0shared";
 const BUCKET = process.env.FILES_BUCKET || "luidsonl-0shared-files";
@@ -115,6 +115,8 @@ describe("Files API — DELETE", () => {
   after(async () => {
     if (ownerToken) await api("POST", "/api/auth/logout", null, ownerToken);
     if (otherToken) await api("POST", "/api/auth/logout", null, otherToken);
+    await purgeUser(ownerUserId, owner.email, [ownerToken]);
+    await purgeUser(otherUserId, other.email, [otherToken]);
   });
 
   describe("DELETE /api/files/{fileId}", () => {

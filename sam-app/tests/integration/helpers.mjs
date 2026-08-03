@@ -1,4 +1,12 @@
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { DynamoDBDocumentClient, QueryCommand, DeleteCommand } from "@aws-sdk/lib-dynamodb";
+import { S3Client, DeleteObjectCommand } from "@aws-sdk/client-s3";
+
 const BASE = process.env.API_ENDPOINT || "http://127.0.0.1:3000";
+const TABLE = process.env.DYNAMODB_TABLE || "0shared";
+const BUCKET = process.env.FILES_BUCKET || "luidsonl-0shared-files";
+const s3 = new S3Client({});
+const dynamo = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 
 export async function api(method, path, body, token) {
   const headers = { "Content-Type": "application/json" };
@@ -19,4 +27,64 @@ export function randomId() {
 
 export function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+/**
+ * Deletes everything a test user created: DynamoDB items under the
+ * USER#<userId> prefix (PROFILE, SESSION#, FILE#), their S3 objects,
+ * the EMAIL#<email> record, and the top-level SESSION#<token> items.
+ */
+export async function purgeUser(userId, email, tokens = []) {
+  if (!userId) return;
+  const errors = [];
+
+  let lastKey;
+  do {
+    const res = await dynamo.send(new QueryCommand({
+      TableName: TABLE,
+      KeyConditionExpression: "PK = :pk",
+      ExpressionAttributeValues: { ":pk": `USER#${userId}` },
+      ExclusiveStartKey: lastKey,
+    }));
+    lastKey = res.LastEvaluatedKey;
+    for (const item of res.Items || []) {
+      const sk = item.SK;
+      try {
+        if (typeof sk === "string" && sk.startsWith("FILE#")) {
+          const objectKey = `uploads/${item.owner_user_id}/${item.file_id}/${item.name}`;
+          await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: objectKey }));
+        }
+        await dynamo.send(new DeleteCommand({ TableName: TABLE, Key: { PK: item.PK, SK: sk } }));
+      } catch (err) {
+        errors.push(`${item.PK}#${sk}: ${err.message}`);
+      }
+    }
+  } while (lastKey);
+
+  if (email) {
+    try {
+      await dynamo.send(new DeleteCommand({
+        TableName: TABLE,
+        Key: { PK: `EMAIL#${email.toLowerCase()}`, SK: "METADATA" },
+      }));
+    } catch (err) {
+      errors.push(`EMAIL#${email.toLowerCase()}: ${err.message}`);
+    }
+  }
+
+  for (const token of tokens) {
+    if (!token) continue;
+    try {
+      await dynamo.send(new DeleteCommand({
+        TableName: TABLE,
+        Key: { PK: `SESSION#${token}`, SK: `SESSION#${token}` },
+      }));
+    } catch (err) {
+      errors.push(`SESSION#${token}: ${err.message}`);
+    }
+  }
+
+  if (errors.length) {
+    console.error(`[purgeUser] cleanup errors for ${userId}: ${errors.join("; ")}`);
+  }
 }

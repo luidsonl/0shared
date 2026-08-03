@@ -3,9 +3,10 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import {
   DynamoDBDocumentClient,
   GetCommand,
+  DeleteCommand,
 } from "@aws-sdk/lib-dynamodb";
 import { S3Client, PutObjectCommand, HeadObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
-import { api, randomId, sleep } from "./helpers.mjs";
+import { api, randomId, sleep, purgeUser } from "./helpers.mjs";
 
 const TABLE = process.env.DYNAMODB_TABLE || "0shared";
 const BUCKET = process.env.FILES_BUCKET || "luidsonl-0shared-files";
@@ -56,9 +57,7 @@ describe("Download API", () => {
 
   after(async () => {
     if (token) await api("POST", "/api/auth/logout", null, token);
-    if (uploadedKey) {
-      await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: uploadedKey })).catch(() => {});
-    }
+    await purgeUser(userId, user.email, [token]);
   });
 
   describe("GET /api/download/{fileId}", () => {
@@ -107,6 +106,43 @@ describe("Download API", () => {
       }
 
       expect(count).to.be.greaterThan(initialCount);
+    });
+
+    it("returns 404 when the S3 object no longer exists", async () => {
+      const uploadRes = await api("POST", "/api/upload", { filename: "ghost-test.txt" }, token);
+      const ghostId = uploadRes.body.fileId;
+      const ghostKey = uploadRes.body.key;
+
+      await fetch(uploadRes.body.url, {
+        method: "PUT",
+        headers: { "Content-Type": "text/plain" },
+        body: "ghost content",
+      });
+
+      let registered = false;
+      for (let i = 0; i < 10; i++) {
+        await sleep(1000);
+        const result = await dynamo.send(new GetCommand({
+          TableName: TABLE,
+          Key: { PK: `USER#${userId}`, SK: `FILE#${ghostId}` },
+        }));
+        if (result.Item) {
+          registered = true;
+          break;
+        }
+      }
+      expect(registered).to.equal(true);
+
+      await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: ghostKey })).catch(() => {});
+
+      const res = await api("GET", `/api/download/${ghostId}`);
+      expect(res.status).to.equal(404);
+      expect(res.body.error).to.equal("File not found");
+
+      await dynamo.send(new DeleteCommand({
+        TableName: TABLE,
+        Key: { PK: `USER#${userId}`, SK: `FILE#${ghostId}` },
+      })).catch(() => {});
     });
   });
 });

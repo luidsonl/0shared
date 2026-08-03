@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import { api, randomId } from "./helpers.mjs";
+import { api, randomId, purgeUser } from "./helpers.mjs";
 
 describe("Auth API", () => {
   const id = randomId();
@@ -10,6 +10,10 @@ describe("Auth API", () => {
   };
   let token;
   let userId;
+
+  after(async () => {
+    await purgeUser(userId, user.email, [token]);
+  });
 
   describe("POST /api/auth/signup", () => {
     it("creates account with valid data", async () => {

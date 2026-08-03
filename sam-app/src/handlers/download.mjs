@@ -1,4 +1,4 @@
-import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, GetObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
@@ -36,6 +36,13 @@ export async function lambdaHandler(event) {
     if (!file) return notFound("File not found");
 
     const key = `uploads/${file.owner_user_id}/${fileId}/${file.name}`;
+
+    const head = await s3.send(new HeadObjectCommand({ Bucket: BUCKET, Key: key })).catch((err) => {
+      if (err.name === "NotFound" || err.name === "NoSuchKey") return null;
+      throw err;
+    });
+
+    if (!head) return notFound("File not found");
 
     const command = new GetObjectCommand({
       Bucket: BUCKET,

@@ -617,9 +617,10 @@ GET /api/download/{fileId}
 
 1. Query FileIdIndex GSI: file_id = :fileId
 2. If not found → 404
-3. Generate presigned GET URL (GetObjectCommand, 5 min TTL)
-4. Invoke Interface Lambda async (InvocationType: Event)
-5. Return { url, filename, contentType, size, downloadCount }
+3. HeadObject: if the S3 object no longer exists → 404
+4. Generate presigned GET URL (GetObjectCommand, 5 min TTL)
+5. Invoke Interface Lambda async (InvocationType: Event)
+6. Return { url, filename, contentType, size, downloadCount }
 ```
 
 **Interface Lambda:**

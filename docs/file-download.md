@@ -218,6 +218,7 @@ await dynamo.send(new UpdateCommand({
 |----------|----------|
 | Missing `fileId` in request | 400 error returned |
 | File not found in GSI | 404 error returned |
+| S3 object no longer exists | 404 error returned (HeadObject check before signing the URL) |
 | S3 key reconstruction fails | 500 error returned (unlikely if file entity is correct) |
 | Async invoke fails | Logged, download still succeeds (counter not incremented) |
 | Interface Lambda fails | Lambda async-invoke retries twice, then the count is lost (best-effort) |

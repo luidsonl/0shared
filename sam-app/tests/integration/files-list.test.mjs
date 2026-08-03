@@ -73,8 +73,16 @@ async function findInOrder(fileIds, sortBy, sortOrder) {
 describe("Files API — List all files", function () {
   after(async function () {
     this.timeout(30000);
+    const errors = [];
     for (const key of SEEDED_KEYS) {
-      await dynamo.send(new DeleteCommand({ TableName: TABLE, Key: key })).catch(() => {});
+      try {
+        await dynamo.send(new DeleteCommand({ TableName: TABLE, Key: key }));
+      } catch (err) {
+        errors.push(`${key.PK}#${key.SK}: ${err.message}`);
+      }
+    }
+    if (errors.length) {
+      console.error(`[files-list cleanup] failed to delete: ${errors.join("; ")}`);
     }
   });
 
@@ -153,9 +161,9 @@ describe("Files API — List all files", function () {
     it("supports pagination with limit and nextToken", async function () {
       const ownerId = `owner-${randomId()}`;
       const seeds = [
-        { name: "page-high.txt", download_count: 9999999997 },
-        { name: "page-mid.txt", download_count: 9999999996 },
-        { name: "page-low.txt", download_count: 9999999995 },
+        { name: "page-high.txt", download_count: 9999999999 },
+        { name: "page-mid.txt", download_count: 9999999998 },
+        { name: "page-low.txt", download_count: 9999999997 },
       ];
       const ids = [];
       for (const s of seeds) {
@@ -177,13 +185,14 @@ describe("Files API — List all files", function () {
       expect(page2.status).to.equal(200);
       expect(page2.body.files).to.have.lengthOf.at.least(1);
 
-      const allIds = [...page1.body.files.map((f) => f.fileId), ...page2.body.files.map((f) => f.fileId)];
-      for (const id of ids) {
-        expect(allIds).to.include(id);
-      }
+      const combined = [...page1.body.files, ...page2.body.files];
 
-      const page1Matched = page1.body.files.filter((f) => ids.includes(f.fileId));
-      expect(page1Matched.map((f) => f.name)).to.deep.equal(["page-high.txt", "page-mid.txt"]);
+      const seen = combined.filter((f) => ids.includes(f.fileId));
+      expect(seen).to.have.lengthOf(3);
+      expect(seen.map((f) => f.name)).to.deep.equal(["page-high.txt", "page-mid.txt", "page-low.txt"]);
+
+      const allIds = combined.map((f) => f.fileId);
+      expect(new Set(allIds).size).to.equal(allIds.length);
     });
 
     it("respects limit between 1 and 100", async function () {

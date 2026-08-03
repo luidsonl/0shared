@@ -1,13 +1,5 @@
 import { expect } from "chai";
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import {
-  DynamoDBDocumentClient,
-  DeleteCommand,
-} from "@aws-sdk/lib-dynamodb";
-import { api, randomId } from "./helpers.mjs";
-
-const TABLE = process.env.DYNAMODB_TABLE || "0shared";
-const dynamo = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+import { api, randomId, purgeUser } from "./helpers.mjs";
 
 const TEST_USERS = [];
 let authToken;
@@ -19,20 +11,19 @@ async function createUser(username) {
   expect(res.status).to.equal(200);
   const loginRes = await api("POST", "/api/auth/login", { email, password });
   expect(loginRes.status).to.equal(200);
-  TEST_USERS.push({ userId: res.body.userId, username, email, password });
+  TEST_USERS.push({
+    userId: res.body.userId,
+    username,
+    email,
+    password,
+    tokens: [loginRes.body.token],
+  });
   return res.body;
 }
 
 async function cleanup() {
   for (const u of TEST_USERS) {
-    await dynamo.send(new DeleteCommand({
-      TableName: TABLE,
-      Key: { PK: `USER#${u.userId}`, SK: "PROFILE" },
-    }));
-    await dynamo.send(new DeleteCommand({
-      TableName: TABLE,
-      Key: { PK: `EMAIL#${u.email}`, SK: "METADATA" },
-    })).catch(() => {});
+    await purgeUser(u.userId, u.email, u.tokens);
   }
 }
 
@@ -47,6 +38,7 @@ describe("Users API — Search", function () {
       password: TEST_USERS[2].password,
     });
     authToken = loginRes.body.token;
+    TEST_USERS[2].tokens.push(authToken);
   });
 
   after(function () {
