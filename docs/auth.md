@@ -49,13 +49,14 @@ Content-Type: application/json
 - `email`, `username`, `password` are all required
 - Password must be at least 8 characters
 - Email is stored lowercase
+- Username is unique (case-insensitive)
 
 **Errors:**
 
 | Status | Condition |
 |--------|-----------|
 | 400 | Missing required fields or password < 8 characters |
-| 409 | Email already registered |
+| 409 | Email already registered or username already taken |
 
 **DynamoDB writes (atomic via transaction):**
 
@@ -63,6 +64,7 @@ Content-Type: application/json
 |--------|-----|--------|
 | Profile | `PK=USER#{userId}, SK=PROFILE` | userId, email, username, passwordHash, createdAt |
 | Email lookup | `PK=EMAIL#{email}, SK=METADATA` | userId |
+| Username lookup | `PK=USERNAME#{username}, SK=METADATA` | userId |
 
 ---
 

@@ -31,6 +31,26 @@ describe("Auth API", () => {
       expect(res.body.error).to.equal("Email already registered");
     });
 
+    it("rejects duplicate username with 409", async () => {
+      const res = await api("POST", "/api/auth/signup", {
+        email: `sameuser-${id}@test.com`,
+        username: user.username,
+        password: "Test1234",
+      });
+      expect(res.status).to.equal(409);
+      expect(res.body.error).to.equal("Username already taken");
+    });
+
+    it("rejects same username with different case with 409", async () => {
+      const res = await api("POST", "/api/auth/signup", {
+        email: `caseuser-${id}@test.com`,
+        username: user.username.toUpperCase(),
+        password: "Test1234",
+      });
+      expect(res.status).to.equal(409);
+      expect(res.body.error).to.equal("Username already taken");
+    });
+
     it("rejects short password with 400", async () => {
       const res = await api("POST", "/api/auth/signup", {
         email: `other-${id}@test.com`,

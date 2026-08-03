@@ -37,6 +37,7 @@ export function sleep(ms) {
 export async function purgeUser(userId, email, tokens = []) {
   if (!userId) return;
   const errors = [];
+  let username;
 
   let lastKey;
   do {
@@ -49,6 +50,7 @@ export async function purgeUser(userId, email, tokens = []) {
     lastKey = res.LastEvaluatedKey;
     for (const item of res.Items || []) {
       const sk = item.SK;
+      if (sk === "PROFILE" && item.username) username = item.username;
       try {
         if (typeof sk === "string" && sk.startsWith("FILE#")) {
           const objectKey = `uploads/${item.owner_user_id}/${item.file_id}/${item.name}`;
@@ -60,6 +62,17 @@ export async function purgeUser(userId, email, tokens = []) {
       }
     }
   } while (lastKey);
+
+  if (username) {
+    try {
+      await dynamo.send(new DeleteCommand({
+        TableName: TABLE,
+        Key: { PK: `USERNAME#${username.toLowerCase()}`, SK: "METADATA" },
+      }));
+    } catch (err) {
+      errors.push(`USERNAME#${username.toLowerCase()}: ${err.message}`);
+    }
+  }
 
   if (email) {
     try {

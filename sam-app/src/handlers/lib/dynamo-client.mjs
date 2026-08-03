@@ -35,6 +35,15 @@ export async function getUserByEmail(email) {
   return getUserById(lookup.Item.userId);
 }
 
+export async function getUserByUsername(username) {
+  const lookup = await doc.send(new GetCommand({
+    TableName: TABLE,
+    Key: { PK: `USERNAME#${username.toLowerCase()}`, SK: "METADATA" },
+  }));
+  if (!lookup.Item) return null;
+  return getUserById(lookup.Item.userId);
+}
+
 export async function createUser(userId, email, username, passwordHash) {
   await doc.send(new TransactWriteCommand({
     TransactItems: [
@@ -62,6 +71,17 @@ export async function createUser(userId, email, username, passwordHash) {
           ConditionExpression: "attribute_not_exists(PK)",
           Item: {
             PK: `EMAIL#${email}`,
+            SK: "METADATA",
+            userId,
+          },
+        },
+      },
+      {
+        Put: {
+          TableName: TABLE,
+          ConditionExpression: "attribute_not_exists(PK)",
+          Item: {
+            PK: `USERNAME#${username.toLowerCase()}`,
             SK: "METADATA",
             userId,
           },

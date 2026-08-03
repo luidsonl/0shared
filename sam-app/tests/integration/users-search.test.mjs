@@ -28,11 +28,17 @@ async function cleanup() {
 }
 
 describe("Users API — Search", function () {
+  const prefix = randomId().slice(0, 6);
+  const alicePrefix = `alice_${prefix}`;
+  const bobPrefix = `bob_${prefix}`;
+  const aliceTestUser = `${alicePrefix}_test`;
+  const aliceWorkUser = `${alicePrefix}_work`;
+
   before(async function () {
     this.timeout(30000);
-    await createUser("alice_test");
-    await createUser("alice_work");
-    const bob = await createUser("bob_test");
+    await createUser(aliceTestUser);
+    await createUser(aliceWorkUser);
+    await createUser(bobPrefix);
     const loginRes = await api("POST", "/api/auth/login", {
       email: TEST_USERS[2].email,
       password: TEST_USERS[2].password,
@@ -47,12 +53,12 @@ describe("Users API — Search", function () {
 
   describe("GET /api/users/search", function () {
     it("returns users matching prefix", async function () {
-      const res = await api("GET", "/api/users/search?q=alice_", null, authToken);
+      const res = await api("GET", `/api/users/search?q=${alicePrefix}`, null, authToken);
       expect(res.status).to.equal(200);
       expect(res.body.users).to.be.an("array");
       expect(res.body.users.length).to.equal(2);
       const usernames = res.body.users.map((u) => u.username).sort();
-      expect(usernames).to.deep.equal(["alice_test", "alice_work"]);
+      expect(usernames).to.deep.equal([aliceTestUser, aliceWorkUser].sort());
       for (const u of res.body.users) {
         expect(u).to.have.property("userId").that.is.a("string");
         expect(u).to.have.property("username").that.is.a("string");
@@ -60,10 +66,10 @@ describe("Users API — Search", function () {
     });
 
     it("returns single user for exact match prefix", async function () {
-      const res = await api("GET", "/api/users/search?q=bob_", null, authToken);
+      const res = await api("GET", `/api/users/search?q=${bobPrefix}`, null, authToken);
       expect(res.status).to.equal(200);
       expect(res.body.users.length).to.equal(1);
-      expect(res.body.users[0].username).to.equal("bob_test");
+      expect(res.body.users[0].username).to.equal(bobPrefix);
       expect(res.body.users[0]).to.have.property("userId").that.is.a("string");
     });
 
@@ -76,14 +82,14 @@ describe("Users API — Search", function () {
     });
 
     it("supports pagination with limit and nextToken", async function () {
-      const page1 = await api("GET", "/api/users/search?q=alice_&limit=1", null, authToken);
+      const page1 = await api("GET", `/api/users/search?q=${alicePrefix}&limit=1`, null, authToken);
       expect(page1.status).to.equal(200);
       expect(page1.body.users.length).to.equal(1);
       expect(page1.body.nextToken).to.be.a("string");
 
       const page2 = await api(
         "GET",
-        `/api/users/search?q=alice_&limit=1&nextToken=${page1.body.nextToken}`,
+        `/api/users/search?q=${alicePrefix}&limit=1&nextToken=${page1.body.nextToken}`,
         null,
         authToken
       );
@@ -116,7 +122,7 @@ describe("Users API — Search", function () {
     });
 
     it("is case-insensitive", async function () {
-      const res = await api("GET", "/api/users/search?q=ALICE_", null, authToken);
+      const res = await api("GET", `/api/users/search?q=${alicePrefix.toUpperCase()}`, null, authToken);
       expect(res.status).to.equal(200);
       expect(res.body.users.length).to.equal(2);
     });

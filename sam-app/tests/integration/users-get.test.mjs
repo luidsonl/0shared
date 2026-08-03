@@ -29,9 +29,11 @@ async function cleanup() {
 }
 
 describe("Users API — Get by ID", function () {
+  const getUsername = `getuser_${randomId()}`;
+
   before(async function () {
     this.timeout(30000);
-    await createUser("getuser_test");
+    await createUser(getUsername);
     existingUserId = TEST_USERS[0].userId;
     const loginRes = await api("POST", "/api/auth/login", {
       email: TEST_USERS[0].email,
@@ -50,7 +52,7 @@ describe("Users API — Get by ID", function () {
       const res = await api("GET", `/api/users/${existingUserId}`, null, authToken);
       expect(res.status).to.equal(200);
       expect(res.body.userId).to.equal(existingUserId);
-      expect(res.body.username).to.equal("getuser_test");
+      expect(res.body.username).to.equal(getUsername);
       expect(res.body).to.have.property("createdAt").that.is.a("string");
       expect(res.body).to.not.have.property("email");
     });

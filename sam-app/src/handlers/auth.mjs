@@ -41,6 +41,9 @@ async function handleSignup(event) {
   const existing = await db.getUserByEmail(email.toLowerCase());
   if (existing) return conflict("Email already registered");
 
+  const existingUsername = await db.getUserByUsername(username);
+  if (existingUsername) return conflict("Username already taken");
+
   const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
   const { randomUUID } = await import("node:crypto");
   const userId = randomUUID();

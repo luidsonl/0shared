@@ -62,7 +62,7 @@ Errors return a consistent JSON format:
 | 401 | Authentication required (missing/invalid/expired Bearer token) |
 | 403 | Authorization failed (not the resource owner) |
 | 404 | Resource not found |
-| 409 | Conflict (e.g., email already registered) |
+| 409 | Conflict (e.g., email or username already registered) |
 | 413 | File size exceeds 1 GB limit |
 | 415 | Unsupported file type |
 | 500 | Internal server error |
