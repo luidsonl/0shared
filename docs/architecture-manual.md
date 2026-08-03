@@ -56,7 +56,7 @@ Upload flow (presigned URL + S3 event):
 ├── terraform/
 │   ├── aws-bootstrap/     # S3 bucket for Terraform state (one-time)
 │   ├── aws-app/           # DynamoDB table + S3 files bucket + SQS queues + Lambdas
-│   │   └── src/           # Lambda source: register-upload.mjs, register-download.mjs, invoke-download-counter.mjs
+│   │   └── src/           # Lambda source: register-upload.mjs, invoke-download-counter.mjs
 │   └── aws-frontend/      # S3 static bucket + CloudFront + OAC + deploy
 ├── frontend/              # React + Vite SPA (src/App.tsx, vite.config.ts)
 ├── agents.md
@@ -91,7 +91,7 @@ Terraform manages all **stateful, long-lived infrastructure**:
 | Resource | Responsibility |
 |---|---|
 | `terraform/aws-bootstrap/` | S3 bucket for Terraform state |
-| `terraform/aws-app/` | DynamoDB table, S3 files bucket (CORS + event notification), SQS upload queue + DLQ, SQS download queue + DLQ, registration Lambda, download interface Lambda, download counter Lambda, event source mappings |
+| `terraform/aws-app/` | DynamoDB table, S3 files bucket (CORS + event notification), SQS upload queue + DLQ, registration Lambda, download interface Lambda, event source mapping |
 | `terraform/aws-frontend/` | S3 static bucket, CloudFront distribution, OAC, frontend deploy |
 
 **Why Terraform for these?**
@@ -231,7 +231,7 @@ sam deploy --parameter-overrides \
 
 ```
  1. terraform/aws-bootstrap/   (one-time S3 state bucket)
- 2. terraform/aws-app/        (DynamoDB + S3 + SQS queues + registration/download-counter Lambdas + event source mappings)
+ 2. terraform/aws-app/        (DynamoDB + S3 + SQS upload queue + registration/download-interface Lambdas + event source mapping)
  3. sam-app/                  (API-triggered Lambdas + API Gateway, exports ApiEndpoint)
  4. terraform/aws-frontend/   (S3 + CloudFront + frontend build & upload)
 ```
@@ -239,11 +239,11 @@ sam deploy --parameter-overrides \
 Dependencies between steps:
 
 ```
-Step 2 → all stateful infra: DynamoDB table, S3 files bucket, SQS queues, DLQs,
-         registration/download-counter Lambdas (SQS-triggered), S3 event notification,
-         event source mappings, FileIdIndex GSI
+Step 2 → all stateful infra: DynamoDB table, S3 files bucket, SQS upload queue + DLQ,
+         registration Lambda (SQS-triggered), download interface Lambda, S3 event notification,
+         event source mapping, FileIdIndex GSI
 Step 3 → reads table/bucket names from samconfig.toml, deploys API-triggered Lambdas,
-         fetches download queue URL from Terraform output
+         fetches download interface Lambda name from Terraform output
 Step 3 → exports API URL (app-0shared-backend-ApiEndpoint) → consumed by Step 4
 Step 4 → reads the export, builds the SPA, uploads to S3, invalidates CloudFront
 ```
@@ -577,12 +577,9 @@ File download uses a **presigned URL + Lambda interface** pattern. SAM handles t
 | Component | Layer | Responsibility |
 |-----------|-------|----------------|
 | Download Lambda | SAM | Validates fileId, generates presigned GET URL (storefront only) |
-| Interface Lambda | Terraform | Receives async invoke from SAM, sends SQS message |
-| Download Counter Lambda | Terraform | Increments download_count, updates GSI attributes |
-| SQS queue + DLQ | Terraform | Buffers download events, provides retry/DLQ for failed counter updates |
-| Event source mapping | Terraform | Connects SQS queue to counter Lambda |
+| Interface Lambda | Terraform | Receives async invoke from SAM, increments download_count, updates GSI attributes |
 
-**Key insight:** SAM knows nothing about SQS. It only generates the presigned URL and fire-and-forgets to the Terraform interface Lambda. All async processing infrastructure lives in Terraform.
+**Key insight:** SAM knows nothing about the async processing. It only generates the presigned URL and fire-and-forgets to the Terraform interface Lambda. All async processing infrastructure lives in Terraform.
 
 **Download flow:**
 
@@ -597,11 +594,11 @@ File download uses a **presigned URL + Lambda interface** pattern. SAM handles t
 
 3. Client ──► GET <presigned_url> ──► S3 (files bucket) ──► File content returned
 
-4. Meanwhile: Download Lambda ──(async invoke)──► Interface Lambda ──► SQS Queue ──► Counter Lambda
-                                                                                      │
-                                                                                      ├── GetItem → current download_count
-                                                                                      ├── UpdateItem → download_count + 1
-                                                                                      └── UpdateItem → gsidown_sk (new GSI key)
+4. Meanwhile: Download Lambda ──(async invoke)──► Interface Lambda ──► DynamoDB
+                                                       │
+                                                       ├── GetItem → current download_count
+                                                       ├── UpdateItem → download_count + 1
+                                                       └── UpdateItem → gsidown_sk (new GSI key)
 ```
 
 **Why Lambda interface over direct SQS from SAM:**
@@ -609,8 +606,8 @@ File download uses a **presigned URL + Lambda interface** pattern. SAM handles t
 - Clean separation: SAM = storefront, Terraform = async processing
 - SAM doesn't need SQS permissions — only Lambda invoke
 - Interface Lambda can be extended (validation, logging, routing)
-- SQS provides DLQ for failed counter updates (14-day retention)
-- Decouples download response from counter update latency
+- Keeps the counter update off the download response path
+- SQS was previously used for retry/DLQ, but download counts are best-effort, so it was removed (the interface Lambda now writes directly to DynamoDB)
 
 **Download endpoint (no auth):**
 
@@ -630,15 +627,6 @@ GET /api/download/{fileId}
 ```javascript
 // terraform/aws-app/src/invoke-download-counter.mjs
 1. Receive { fileId, userId } from SAM invoke
-2. Send SQS message { fileId, userId } to download queue
-3. Return 200 OK
-```
-
-**Download Counter Lambda:**
-
-```javascript
-// terraform/aws-app/src/register-download.mjs
-1. Parse SQS message: { fileId, userId }
 2. GetItem: PK=USER#{userId}, SK=FILE#{fileId}
 3. newCount = (download_count || 0) + 1
 4. newGsiKey = String(newCount).padStart(10, "0") + "#" + fileId
@@ -649,8 +637,5 @@ GET /api/download/{fileId}
 
 1. Add Download Lambda definition in `sam-app/template.yaml`
 2. Add Download Lambda handler in `sam-app/src/handlers/download.mjs`
-3. Add Interface Lambda in `terraform/aws-app/resources/modules/download-queue/main.tf`
-4. Add Download Counter Lambda in `terraform/aws-app/resources/modules/download-queue/main.tf`
-5. Add SQS queue + DLQ in `terraform/aws-app/resources/modules/download-queue/main.tf`
-6. Add event source mapping (SQS → Counter Lambda) in `terraform/aws-app/resources/modules/download-queue/main.tf`
-7. Add FileIdIndex GSI to DynamoDB table in `terraform/aws-app/resources/modules/database/main.tf`
+3. Add Interface Lambda in `terraform/aws-app/resources/modules/download-counter/main.tf`
+4. Add FileIdIndex GSI to DynamoDB table in `terraform/aws-app/resources/modules/database/main.tf`

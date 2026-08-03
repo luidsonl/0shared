@@ -59,7 +59,7 @@ Download flow (presigned URL + Lambda interface):
   │ (files)  │
   └──────────┘
 
-  Meanwhile: Download Lambda ──(async invoke)──► Interface Lambda ──► SQS ──► Counter Lambda ──► DynamoDB
+  Meanwhile: Download Lambda ──(async invoke)──► Interface Lambda ──► DynamoDB (increments download counter)
 ```
 
 ---
@@ -70,7 +70,7 @@ Download flow (presigned URL + Lambda interface):
 ├── terraform/
 │   ├── aws-bootstrap/     # S3 bucket for Terraform state (one-time)
 │   ├── aws-app/           # DynamoDB table + S3 files bucket + SQS queues + Lambdas
-│   │   └── src/           # Lambda source: register-upload.mjs, register-download.mjs, invoke-download-counter.mjs
+│   │   └── src/           # Lambda source: register-upload.mjs, invoke-download-counter.mjs
 │   └── aws-frontend/      # S3 static bucket + CloudFront + OAC + deploy
 ├── frontend/              # React + Vite SPA (src/App.tsx, vite.config.ts)
 ├── agents.md
@@ -109,7 +109,7 @@ Terraform manages all **stateful, long-lived infrastructure**:
 | Resource | Responsibility |
 |---|---|
 | `terraform/aws-bootstrap/` | S3 bucket for Terraform state |
-| `terraform/aws-app/` | DynamoDB table, S3 files bucket (CORS + event notification), SQS upload queue + DLQ, SQS download queue + DLQ, registration Lambda, download interface Lambda, download counter Lambda, event source mappings |
+| `terraform/aws-app/` | DynamoDB table, S3 files bucket (CORS + event notification), SQS upload queue + DLQ, registration Lambda, download interface Lambda, event source mapping |
 | `terraform/aws-frontend/` | S3 static bucket, CloudFront distribution, OAC, frontend deploy |
 
 **Why Terraform for these?**
@@ -242,7 +242,7 @@ sam deploy --parameter-overrides \
 
 ```
  1. terraform/aws-bootstrap/   (one-time S3 state bucket)
- 2. terraform/aws-app/        (DynamoDB + S3 + SQS queues + registration/download-counter Lambdas + event source mappings)
+ 2. terraform/aws-app/        (DynamoDB + S3 + SQS upload queue + registration/download-interface Lambdas + event source mapping)
  3. sam-app/                  (API-triggered Lambdas + API Gateway, exports ApiEndpoint)
  4. terraform/aws-frontend/   (S3 + CloudFront + frontend build & upload)
 ```
@@ -250,9 +250,9 @@ sam deploy --parameter-overrides \
 Dependencies between steps:
 
 ```
-Step 2 → all stateful infra: DynamoDB table, S3 files bucket, SQS queues, DLQs,
-         registration/download-counter Lambdas (SQS-triggered), S3 event notification,
-         event source mappings, FileIdIndex GSI
+Step 2 → all stateful infra: DynamoDB table, S3 files bucket, SQS upload queue + DLQ,
+         registration Lambda (SQS-triggered), download interface Lambda, S3 event notification,
+         event source mapping, FileIdIndex GSI
 Step 3 → reads table/bucket names from samconfig.toml, deploys API-triggered Lambdas,
          fetches download interface Lambda name from Terraform output
 Step 3 → exports API URL (app-0shared-backend-ApiEndpoint) → consumed by Step 4
@@ -378,12 +378,6 @@ cd sam-app && ./scripts/clean.sh --dry-run # show what would be deleted
 - Message retention: 14 days
 - Only the Registration Lambda has `sqs:ReceiveMessage` permissions (via SAM event source mapping)
 
-### SQS (download queue)
-
-- Dead-letter queue (DLQ) catches failed counter updates (14-day retention)
-- Main queue visibility timeout: 4 minutes
-- Only the Counter Lambda has `sqs:ReceiveMessage` permissions
-
 ### CloudFront
 
 - OAC (Origin Access Control) is used instead of legacy OAI
@@ -414,10 +408,10 @@ cd sam-app && ./scripts/clean.sh --dry-run # show what would be deleted
 | **Upload Lambda in SAM** | API-triggered; benefits from `sam local start-api` for local testing |
 | **User ID in S3 key** | Registration Lambda identifies file owner by parsing `uploads/{user_id}/{file_id}/{filename}` |
 | **1 GB presigned URL limit** | S3 rejects oversized uploads at the edge — zero cost for abuse attempts |
-| **Download counter via Lambda interface** | SAM = storefront only; Terraform = all async processing. Clean separation of concerns |
+| **Download counter via Lambda interface** | SAM = storefront only; Terraform = all async processing. The interface Lambda receives the async invoke and increments the counter |
 | **FileIdIndex GSI** | Enables public download URLs by fileId without knowing the owner |
 | **No auth on download** | Files are shared publicly via fileId; owner controls access via file deletion |
-| **Async Lambda invoke** | Fire-and-forget pattern keeps download response fast; SQS handles retry/DLQ |
+| **Async Lambda invoke** | Fire-and-forget pattern keeps download response fast; counter precision is non-critical so a lost update is acceptable |
 
 ---
 

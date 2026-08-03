@@ -7,45 +7,38 @@ File downloads use a two-phase flow:
 1. **Presigned URL phase:** Client requests a presigned download URL from the API (Lambda returns a URL). No authentication required.
 2. **Direct download phase:** Client GETs the file directly from S3 using the presigned URL (no Lambda involvement).
 
-After the URL is generated, a download counter is incremented asynchronously via Lambda interface → SQS → Counter Lambda. This keeps the API response fast while still tracking downloads.
+After the URL is generated, a download counter is incremented asynchronously via the Terraform interface Lambda. This keeps the API response fast while still tracking downloads.
 
 **SAM handler:** `sam-app/src/handlers/download.mjs` (presigned URL + async counter invoke)
-**Interface Lambda:** `terraform/aws-app/src/invoke-download-counter.mjs` (receives async invoke, sends SQS)
-**Counter Lambda:** `terraform/aws-app/src/register-download.mjs` (increments download_count, updates GSI)
+**Interface Lambda:** `terraform/aws-app/src/invoke-download-counter.mjs` (receives async invoke, increments download_count, updates GSI)
 
 ---
 
 ## Download Flow Diagram
 
 ```
-  Client                     API (SAM)               Interface Lambda (TF)      SQS             Counter Lambda (TF)     DynamoDB
-    │                            │                          │                       │                     │                       │
-    │  GET /api/download/{fileId}│                          │                       │                     │                       │
-    │───────────────────────────►│                          │                       │                     │                       │
-    │                            │                          │                       │                     │                       │
-    │                            │  Query FileIdIndex       │                       │                     │                       │
-    │                            │─────────────────────────────────────────────────────────────────────────────►│                       │
-    │                            │                          │                       │                     │                       │
-    │                            │  ◄── file entity ────────│                       │                     │                       │
-    │                            │                          │                       │                     │                       │
-    │  ◄── presigned URL ────────│                          │                       │                     │                       │
-    │      (5 min TTL)           │                          │                       │                     │                       │
-    │                            │                          │                       │                     │                       │
-    │  GET /uploads/...          │                          │                       │                     │                       │
-    │  (direct to S3)            │─────────────────────────►│                       │                     │                       │
-    │                            │                          │                       │                     │                       │
-    │  ◄── file content ─────────│                          │                       │                     │                       │
-    │                            │                          │                       │                     │                       │
-    │                            │  InvokeAsync (Event)     │                       │                     │                       │
-    │                            │─────────────────────────►│                       │                     │                       │
-    │                            │                          │                       │                     │                       │
-    │                            │                          │  SendMessage          │                     │                       │
-    │                            │                          │──────────────────────►│                     │                       │
-    │                            │                          │                       │  ReceiveMessage      │                       │
-    │                            │                          │                       │────────────────────►│                       │
-    │                            │                          │                       │                     │  Update download_count │
-    │                            │                          │                       │                     │──────────────────────►│
-    │                            │                          │                       │                     │                       │
+  Client                     API (SAM)                 Interface Lambda (TF)         DynamoDB
+    │                            │                            │                         │
+    │  GET /api/download/{fileId}│                            │                         │
+    │───────────────────────────►│                            │                         │
+    │                            │  Query FileIdIndex         │                         │
+    │                            │─────────────────────────────────────────────────────►│
+    │                            │  ◄── file entity ─────────│                         │
+    │                            │                            │                         │
+    │  ◄── presigned URL ────────│                            │                         │
+    │      (5 min TTL)           │                            │                         │
+    │                            │                            │                         │
+    │  GET /uploads/...          │                            │                         │
+    │  (direct to S3)            │                            │                         │
+    │                            │                            │                         │
+    │  ◄── file content ─────────│                            │                         │
+    │                            │                            │                         │
+    │                            │  InvokeAsync (Event)       │                         │
+    │                            │───────────────────────────►│                         │
+    │                            │                            │  Update download_count  │
+    │                            │                            │  + gsidown_sk           │
+    │                            │                            │────────────────────────►│
+    │                            │                            │                         │
 ```
 
 ---
@@ -149,15 +142,14 @@ The download counter is incremented asynchronously to keep the API response fast
 
 The download endpoint must return quickly. The counter update is "fire and forget" — the user doesn't need to wait for it. The async pattern provides:
 - Fast API response (no blocking on DynamoDB write)
-- Retry via SQS (if the counter Lambda fails, SQS retries)
-- DLQ for dead-letter inspection
+- The Terraform interface Lambda owns the counter write, keeping SAM as a pure storefront
 
 ### Why a Lambda Interface?
 
-SAM must not touch SQS directly. SAM owns the "storefront" (API-triggered Lambdas); Terraform owns all async processing infrastructure. The Interface Lambda acts as a bridge:
+SAM must not touch async processing infrastructure directly. SAM owns the "storefront" (API-triggered Lambdas); Terraform owns all async processing. The Interface Lambda acts as the boundary:
 
 ```
-SAM (Download Lambda) ──async invoke──► Interface Lambda (Terraform) ──SQS──► Counter Lambda (Terraform)
+SAM (Download Lambda) ──async invoke──► Interface Lambda (Terraform) ──► DynamoDB
 ```
 
 This clean separation means SAM and Terraform have no circular dependencies.
@@ -178,34 +170,16 @@ await lambda.send(new InvokeCommand({
 
 - `InvocationType: "Event"` = fire-and-forget (no response awaited)
 - The `.catch()` logs but does not fail the download request
+- If the Interface Lambda errors, Lambda retries the async invoke twice automatically (best-effort counting)
 
-### Phase 2: Interface Lambda → SQS
+### Phase 2: Interface Lambda → DynamoDB
 
 **Handler:** `terraform/aws-app/src/invoke-download-counter.mjs`
 
-The Interface Lambda receives the payload and sends a message to the download SQS queue:
+The Interface Lambda receives the payload and increments the counter directly in DynamoDB:
 
-```js
-await sqs.send(new SendMessageCommand({
-  QueueUrl: QUEUE_URL,
-  MessageBody: JSON.stringify({ fileId, userId }),
-}));
-```
-
-**Logging:**
-
-```json
-{"event": "download_counter_queued", "fileId": "...", "userId": "..."}
-```
-
-### Phase 3: SQS → Counter Lambda
-
-**Handler:** `terraform/aws-app/src/register-download.mjs`
-
-The Counter Lambda is triggered by the SQS event source mapping (Terraform-managed). For each message:
-
-1. Parse `fileId` and `userId` from the message body
-2. Fetch the current `download_count` and `gsidown_sk` from DynamoDB
+1. Parse `fileId` and `userId` from the payload
+2. Fetch the current `download_count` from DynamoDB
 3. Increment the count by 1
 4. Generate the new `gsidown_sk` (zero-padded for correct sort order)
 5. Update both fields atomically
@@ -238,17 +212,6 @@ await dynamo.send(new UpdateCommand({
 
 ---
 
-## SQS Configuration
-
-| Setting | Value | Rationale |
-|---------|-------|-----------|
-| Visibility timeout | 4 minutes | Allows Lambda to process without re-triggering |
-| Message retention | 14 days | Enough time to debug failures |
-| Max receive count | 3 | Retry before sending to DLQ |
-| DLQ retention | 14 days | Time to inspect and replay failed messages |
-
----
-
 ## Error Scenarios
 
 | Scenario | Handling |
@@ -257,7 +220,7 @@ await dynamo.send(new UpdateCommand({
 | File not found in GSI | 404 error returned |
 | S3 key reconstruction fails | 500 error returned (unlikely if file entity is correct) |
 | Async invoke fails | Logged, download still succeeds (counter not incremented) |
-| SQS message fails (Counter Lambda error) | Message retried up to 3 times, then sent to DLQ |
+| Interface Lambda fails | Lambda async-invoke retries twice, then the count is lost (best-effort) |
 | `download_count` is missing | Defaults to `0` before incrementing |
 
 ---

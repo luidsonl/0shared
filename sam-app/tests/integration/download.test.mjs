@@ -90,18 +90,23 @@ describe("Download API", () => {
       expect(content).to.equal("Download test content");
     });
 
-    it("increments download_count after SQS processing", async () => {
+    it("increments download_count after counter processing", async () => {
       const res = await api("GET", `/api/download/${uploadedFileId}`);
       expect(res.status).to.equal(200);
       const initialCount = res.body.downloadCount;
 
-      await sleep(3000);
+      let count = initialCount;
+      for (let i = 0; i < 20; i++) {
+        await sleep(500);
+        const item = await dynamo.send(new GetCommand({
+          TableName: TABLE,
+          Key: { PK: `USER#${userId}`, SK: `FILE#${uploadedFileId}` },
+        }));
+        count = item.Item?.download_count ?? initialCount;
+        if (count > initialCount) break;
+      }
 
-      const item = await dynamo.send(new GetCommand({
-        TableName: TABLE,
-        Key: { PK: `USER#${userId}`, SK: `FILE#${uploadedFileId}` },
-      }));
-      expect(item.Item.download_count).to.be.greaterThan(initialCount);
+      expect(count).to.be.greaterThan(initialCount);
     });
   });
 });

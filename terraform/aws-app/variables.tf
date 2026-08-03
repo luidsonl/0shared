@@ -44,12 +44,6 @@ variable "queue_suffix" {
   default     = "_upload"
 }
 
-variable "download_queue_suffix" {
-  type        = string
-  description = "Suffix appended to the SQS download queue name (e.g. '_download')"
-  default     = "_download"
-}
-
 variable "lambda_runtime" {
   type        = string
   description = "Runtime for Lambda functions (e.g. 'nodejs22.x')"

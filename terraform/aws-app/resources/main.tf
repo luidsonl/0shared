@@ -24,9 +24,8 @@ module "upload_queue" {
   lambda_runtime      = var.lambda_runtime
 }
 
-module "download_queue" {
-  source              = "./modules/download-queue"
-  queue_name          = "${var.project_name}${local.env_under}${var.download_queue_suffix}"
+module "download_counter" {
+  source              = "./modules/download-counter"
   project_name        = var.project_name
   dynamodb_table_name = module.database.table_name
   dynamodb_table_arn  = module.database.table_arn
