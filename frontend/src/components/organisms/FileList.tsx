@@ -33,8 +33,8 @@ export default function FileList({ files, showOwner = false, loading = false, on
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-sm">
-        <thead>
+      <table className="w-full border-collapse text-sm max-sm:block">
+        <thead className="max-sm:hidden">
           <tr className="border-b border-border text-[11px] uppercase tracking-widest text-muted">
             <th className="py-2.5 pl-3 pr-2 text-left font-semibold">Name</th>
             <th className="whitespace-nowrap px-2 py-2.5 text-right font-semibold">Size</th>
@@ -44,7 +44,7 @@ export default function FileList({ files, showOwner = false, loading = false, on
             <th className="py-2.5 pl-2 pr-3 text-right font-semibold">Action</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody className="max-sm:block">
           {files.map((file) => (
             <FileRow key={file.fileId} file={file} showOwner={showOwner} onDownload={handleDownload} onDelete={onDelete} />
           ))}
