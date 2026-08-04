@@ -55,4 +55,16 @@
   a:hover {
     text-decoration: underline;
   }
+
+  /* Tailwind v4 resets buttons to `cursor: default`; restore pointer on
+     anything interactive that is not disabled. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="menuitem"],
+  [role="option"],
+  [role="menuitemradio"],
+  select:not(:disabled),
+  summary {
+    cursor: pointer;
+  }
 }
