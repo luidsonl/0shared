@@ -8,7 +8,7 @@ interface UserListProps {
 export default function UserList({ users }: UserListProps) {
   if (users.length === 0) return <EmptyState message="No users found." />;
   return (
-    <div className="card-grid">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {users.map((user) => (
         <UserCard key={user.userId} userId={user.userId} username={user.username} />
       ))}

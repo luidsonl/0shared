@@ -88,6 +88,8 @@ make destroy-backend
 | [File Upload](docs/file-upload.md) | Presigned URLs, multipart, S3 event → SQS → registration |
 | [File Download](docs/file-download.md) | Presigned URLs, async counter, Lambda interface pattern |
 | [Frontend](docs/frontend.md) | React SPA, CloudFront, build & deploy |
+| [Design System](docs/design-system.md) | Design tokens, components, styling conventions |
+| [Brand](docs/brand.md) | Logo, color palette, typography, voice |
 | [DynamoDB Schema](docs/dynamodb-schema.md) | Single-table design, entities, indexes, access patterns |
 | [Architecture Manual](docs/architecture-manual.md) | Detailed architecture, design decisions, extension guide |
 

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Search } from "lucide-react";
 import Button from "../atoms/Button";
 import TextInput from "../atoms/TextInput";
 
@@ -15,15 +16,18 @@ export default function SearchBar() {
   }
 
   return (
-    <form className="field-row" onSubmit={handleSubmit}>
+    <form onSubmit={handleSubmit} className="flex items-center gap-2">
       <TextInput
         type="search"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search users"
         aria-label="Search users"
+        className="h-8 w-44 sm:w-56"
       />
-      <Button>Search</Button>
+      <Button type="submit" size="sm" variant="ghost" aria-label="Search">
+        <Search size={14} />
+      </Button>
     </form>
   );
 }

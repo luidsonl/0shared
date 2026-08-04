@@ -5,6 +5,7 @@
 The frontend is a React single-page application (SPA) served from S3 via CloudFront. CloudFront also proxies API requests (`/api/*`) to the API Gateway origin, eliminating the need for CORS configuration.
 
 **Stack:** React 19 + Vite 8 + TypeScript 6 + React Compiler
+**UI:** Tailwind CSS v4 + Radix primitives + own components (see [Design System](design-system.md))
 **Infrastructure:** Terraform module at `terraform/aws-frontend/`
 **Source:** `frontend/`
 
@@ -170,22 +171,30 @@ Runs all four layers: bootstrap → infra → backend → frontend. The frontend
 ```
 frontend/
 ├── index.html            # Entry point, loads /env.js + React app
-├── package.json          # React 19, Vite 8, TypeScript 6
-├── vite.config.ts        # Vite config (react + babel + React Compiler)
+├── package.json          # React 19, Vite 8, TypeScript 6, Tailwind v4
+├── vite.config.ts        # Vite config (react + babel + React Compiler + Tailwind)
 ├── tsconfig.json         # Project references (app + node)
 ├── tsconfig.app.json     # App TypeScript config (ES2023, JSX)
 ├── tsconfig.node.json    # Node TypeScript config (vite.config.ts)
 ├── eslint.config.js      # ESLint flat config
 ├── public/
-│   ├── favicon.svg       # Favicon
-│   └── icons.svg         # SVG icon sprite
+│   ├── env.js            # Runtime config (window.__ENV__)
+│   └── favicon.svg       # 0shared brand mark
 └── src/
-    ├── main.tsx          # React entry point (StrictMode)
-    ├── App.tsx           # Main component (landing page with counter)
-    ├── App.css           # Component styles
-    ├── index.css          # Global styles (light/dark theme)
-    └── assets/            # Static assets (images, SVGs)
+    ├── main.tsx          # React entry point (StrictMode, font + global CSS)
+    ├── App.tsx           # Router + auth guard
+    ├── index.css         # Tailwind entry, base styles
+    ├── styles/tokens.css # Design tokens (CSS custom properties, @theme)
+    ├── api/              # API client + endpoints + types
+    ├── components/       # Atomic design: brand/atoms/molecules/organisms/templates
+    ├── context/          # AuthContext + useAuth
+    ├── hooks/            # usePaginatedFiles, useUserSearch
+    ├── lib/              # utils (cn), format, errors, files
+    └── pages/            # Home, Login, Signup, Search, UserProfile, NotFound
 ```
+
+See [Design System](design-system.md) for the token/component documentation and
+[Brand](brand.md) for the visual identity.
 
 ---
 
@@ -220,4 +229,6 @@ make destroy
 
 - [Architecture](./architecture.md) — deployment order, tooling strategy
 - [Backend](./backend.md) — API endpoints that the frontend consumes
+- [Design System](./design-system.md) — design tokens and components
+- [Brand](./brand.md) — visual identity, logo, palette, typography
 - [DynamoDB Schema](./dynamodb-schema.md) — data model

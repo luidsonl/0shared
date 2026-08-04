@@ -4,8 +4,8 @@ interface EmptyStateProps {
 
 export default function EmptyState({ message }: EmptyStateProps) {
   return (
-    <div className="sunken-panel" style={{ padding: "16px", textAlign: "center" }}>
-      <p className="muted-text">{message}</p>
+    <div className="border border-dashed border-border px-6 py-12 text-center">
+      <p className="text-sm text-muted">{message}</p>
     </div>
   );
 }

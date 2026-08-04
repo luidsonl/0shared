@@ -14,6 +14,8 @@
 | [File Upload](docs/file-upload.md) | Upload flow, presigned URLs, S3 event → SQS → registration |
 | [File Download](docs/file-download.md) | Download flow, presigned URLs, async counter, Lambda interface pattern |
 | [Frontend](docs/frontend.md) | React SPA, CloudFront, S3 static hosting, build & deploy |
+| [Design System](docs/design-system.md) | Design tokens, components, styling conventions |
+| [Brand](docs/brand.md) | Logo, color palette, typography, voice |
 | [DynamoDB Schema](docs/dynamodb-schema.md) | Single-table design, entities, indexes, access patterns |
 
 ## Quick Links
@@ -26,5 +28,7 @@
 - **File upload flow** — [File Upload > Upload Flow Diagram](docs/file-upload.md#upload-flow-diagram)
 - **File download flow** — [File Download > Download Flow Diagram](docs/file-download.md#download-flow-diagram)
 - **Frontend deploy** — [Frontend > Build & Deploy](docs/frontend.md#build--deploy)
+- **Design tokens** — [Design System > Design tokens](docs/design-system.md#design-tokens)
+- **Brand palette** — [Brand > Color palette](docs/brand.md#color-palette)
 - **CloudFront config** — [Frontend > CloudFront Distribution](docs/frontend.md#cloudfront-distribution)
 - **Access patterns** — [DynamoDB Schema > Access Patterns](docs/dynamodb-schema.md#access-patterns)

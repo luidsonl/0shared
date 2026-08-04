@@ -1,0 +1,37 @@
+@theme {
+  /* Typography — everything is monospace by design. */
+  --font-mono:
+    "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas,
+    "Liberation Mono", monospace;
+  --font-sans: var(--font-mono);
+
+  /* Brand / surface palette. */
+  --color-background: #0d0d0f;
+  --color-surface: #16181d;
+  --color-surface-elevated: #1f2127;
+
+  --color-primary: #c43a32;
+  --color-primary-hover: #a82f2a;
+  --color-primary-foreground: #f2ead3;
+
+  --color-accent: #d4af37;
+  --color-accent-2: #9e6a2e;
+
+  --color-foreground: #f2ead3;
+  --color-muted: #a0a4ae;
+
+  --color-border: #3a3f47;
+
+  --color-success: #4f7f4c;
+  --color-warning: #d99b2b;
+  --color-danger: #b33939;
+
+  /* Shape — sharp edges everywhere. */
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+
+  /* Motion — minimal, fast. */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+}

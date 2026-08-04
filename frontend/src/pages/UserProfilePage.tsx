@@ -3,6 +3,9 @@ import { useParams } from "react-router-dom";
 import PageTitle from "../components/atoms/PageTitle";
 import ErrorText from "../components/atoms/ErrorText";
 import Spinner from "../components/atoms/Spinner";
+import Avatar from "../components/atoms/Avatar";
+import Badge from "../components/atoms/Badge";
+import Card, { CardBody } from "../components/atoms/Card";
 import FileList from "../components/organisms/FileList";
 import Pagination from "../components/molecules/Pagination";
 import { usePaginatedFiles } from "../hooks/usePaginatedFiles";
@@ -19,7 +22,7 @@ export default function UserProfilePage() {
 
   const { items, nextToken, loading, error, hasPrev, nextPage, prevPage } =
     usePaginatedFiles<FileItem>(
-      (token) => listUserFiles(userId, { nextToken: token, limit: 20 }),
+      (next) => listUserFiles(userId, { nextToken: next, limit: 20 }),
       userId,
     );
 
@@ -50,21 +53,36 @@ export default function UserProfilePage() {
 
   return (
     <>
-      <PageTitle>User profile</PageTitle>
+      <div className="mb-8">
+        <PageTitle>User profile</PageTitle>
+      </div>
       {currentError ? (
         <ErrorText message={currentError} />
       ) : current ? (
-        <div className="profile-box sunken-panel" style={{ padding: "12px" }}>
-          <div>
-            <strong>{current.username}</strong>
-            <div className="muted-text">Member since {formatDate(current.createdAt)}</div>
-            <div className="muted-text">{current.userId}</div>
-          </div>
-        </div>
+        <Card className="mb-8">
+          <CardBody className="flex flex-wrap items-center gap-4">
+            <Avatar username={current.username} className="h-12 w-12 text-lg" />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-3">
+                <h2 className="text-lg font-bold text-foreground">{current.username}</h2>
+                <Badge variant="accent">Member</Badge>
+              </div>
+              <p className="mt-1 text-xs text-muted">
+                Member since {formatDate(current.createdAt)}
+              </p>
+              <p className="break-all text-[11px] uppercase tracking-widest text-muted">
+                {current.userId}
+              </p>
+            </div>
+          </CardBody>
+        </Card>
       ) : (
-        <Spinner />
+        <Spinner className="mb-8" />
       )}
-      <PageTitle>Uploaded files</PageTitle>
+
+      <div className="mb-4">
+        <PageTitle>Uploaded files</PageTitle>
+      </div>
       {error ? (
         <ErrorText message={error} />
       ) : (

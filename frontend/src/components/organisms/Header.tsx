@@ -1,15 +1,22 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import { Link, NavLink } from "react-router-dom";
 import Button from "../atoms/Button";
 import SearchBar from "../molecules/SearchBar";
-import UploadWindow from "../molecules/UploadWindow";
+import UploadButton from "./UploadButton";
 import UserMenu from "../molecules/UserMenu";
+import { Logo, Wordmark } from "../brand/Logo";
 import { useAuth } from "../../context/useAuth";
+import { cn } from "../../lib/utils";
+
+const navLinkClass = ({ isActive }: { isActive: boolean }) =>
+  cn(
+    "px-2 py-1 text-[11px] font-semibold uppercase tracking-widest transition-colors",
+    isActive ? "text-accent" : "text-muted hover:text-foreground",
+  );
 
 export default function Header() {
   const { user, token, logout } = useAuth();
   const navigate = useNavigate();
-  const [uploadOpen, setUploadOpen] = useState(false);
 
   async function handleLogout() {
     await logout();
@@ -17,46 +24,55 @@ export default function Header() {
   }
 
   return (
-    <div className="menu-bar">
-      <Link className="menu-item brand" to="/">
-        0shared
-      </Link>
-      <Link className="menu-item" to="/">
-        Home
-      </Link>
-      <Link className="menu-item" to="/search">
-        Search
-      </Link>
-      <div className="toolbar-right">
-        <SearchBar />
-        {token ? (
-          user ? (
-            <UserMenu
-              username={user.username}
-              userId={user.userId}
-              onUpload={() => setUploadOpen(true)}
-              onLogout={handleLogout}
-            />
+    <header className="border-b border-border bg-background">
+      <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3">
+        <Link to="/" className="flex items-center gap-2 text-foreground hover:no-underline">
+          <Logo className="h-7 w-7 text-foreground" />
+          <Wordmark className="text-base" />
+        </Link>
+
+        <nav className="flex items-center gap-1">
+          <NavLink to="/" end className={navLinkClass}>
+            Home
+          </NavLink>
+          <NavLink to="/search" className={navLinkClass}>
+            Search
+          </NavLink>
+        </nav>
+
+        <div className="ml-auto flex flex-wrap items-center gap-3">
+          <SearchBar />
+          {token ? (
+            user ? (
+              <>
+                <UploadButton size="sm" />
+                <UserMenu
+                  username={user.username}
+                  userId={user.userId}
+                  onLogout={handleLogout}
+                />
+              </>
+            ) : (
+              <Button onClick={handleLogout} variant="ghost" size="sm">
+                Log out
+              </Button>
+            )
           ) : (
-            <Button onClick={handleLogout}>Log out</Button>
-          )
-        ) : (
-          <>
-            <Link className="menu-item" to="/login">
-              Log in
-            </Link>
-            <Link className="menu-item" to="/signup">
-              Sign up
-            </Link>
-          </>
-        )}
+            <>
+              <Link to="/login">
+                <Button variant="ghost" size="sm">
+                  Log in
+                </Button>
+              </Link>
+              <Link to="/signup">
+                <Button variant="primary" size="sm">
+                  Sign up
+                </Button>
+              </Link>
+            </>
+          )}
+        </div>
       </div>
-      {uploadOpen && (
-        <UploadWindow
-          onClose={() => setUploadOpen(false)}
-          onUploaded={() => setUploadOpen(false)}
-        />
-      )}
-    </div>
+    </header>
   );
 }

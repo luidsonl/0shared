@@ -1,3 +1,4 @@
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import Button from "../atoms/Button";
 
 interface PaginationProps {
@@ -8,14 +9,20 @@ interface PaginationProps {
   disabled?: boolean;
 }
 
-export default function Pagination({ hasPrev, hasNext, onPrev, onNext, disabled = false }: PaginationProps) {
+export default function Pagination({
+  hasPrev,
+  hasNext,
+  onPrev,
+  onNext,
+  disabled = false,
+}: PaginationProps) {
   return (
-    <div className="row mt">
-      <Button onClick={onPrev} disabled={disabled || !hasPrev}>
-        &lt; Prev
+    <div className="mt-6 flex items-center gap-2">
+      <Button onClick={onPrev} variant="secondary" size="sm" disabled={disabled || !hasPrev}>
+        <ChevronLeft size={14} /> Prev
       </Button>
-      <Button onClick={onNext} disabled={disabled || !hasNext}>
-        Next &gt;
+      <Button onClick={onNext} variant="secondary" size="sm" disabled={disabled || !hasNext}>
+        Next <ChevronRight size={14} />
       </Button>
     </div>
   );

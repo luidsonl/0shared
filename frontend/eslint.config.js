@@ -24,4 +24,12 @@ export default defineConfig([
       'react-hooks/set-state-in-effect': 'off',
     },
   },
+  {
+    // Primitives re-export Radix components (shadcn-style). Fast refresh only
+    // works for pure-component files, which re-exports break by design.
+    files: ['src/components/atoms/Dialog.tsx', 'src/components/atoms/Select.tsx'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
 ])

@@ -4,7 +4,8 @@ import Button from "../atoms/Button";
 import ErrorText from "../atoms/ErrorText";
 import Field from "../atoms/Field";
 import TextInput from "../atoms/TextInput";
-import Window from "../atoms/Window";
+import Card, { CardBody, CardFooter } from "../atoms/Card";
+import { Logo, Wordmark } from "../brand/Logo";
 import { useAuth } from "../../context/useAuth";
 import { toMessage } from "../../lib/errors";
 
@@ -34,38 +35,52 @@ export default function LoginForm() {
   }
 
   return (
-    <div className="center-col" style={{ width: "100%" }}>
-      <Window title="Log in">
-        <form className="field-row-stacked" onSubmit={handleSubmit}>
-          <Field label="Email:" htmlFor="login-email">
-            <TextInput
-              id="login-email"
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </Field>
-          <Field label="Password:" htmlFor="login-password">
-            <TextInput
-              id="login-password"
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </Field>
-          {error && <ErrorText message={error} />}
-          <div className="row">
-            <Button type="submit" disabled={submitting}>
+    <div className="mx-auto flex w-full max-w-sm flex-col">
+      <div className="mb-8 flex items-center justify-center gap-3">
+        <Logo className="h-9 w-9 text-foreground" />
+        <div>
+          <Wordmark className="block text-lg" />
+          <span className="text-[11px] uppercase tracking-widest text-muted">Log in</span>
+        </div>
+      </div>
+      <Card>
+        <CardBody>
+          <form className="space-y-4" onSubmit={handleSubmit}>
+            <Field label="Email" htmlFor="login-email">
+              <TextInput
+                id="login-email"
+                type="email"
+                required
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </Field>
+            <Field label="Password" htmlFor="login-password">
+              <TextInput
+                id="login-password"
+                type="password"
+                required
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </Field>
+            {error && <ErrorText message={error} />}
+            <Button type="submit" className="w-full" disabled={submitting}>
               {submitting ? "Logging in..." : "Log in"}
             </Button>
-          </div>
-          <p>
-            No account? <Link to="/signup">Sign up</Link>
+          </form>
+        </CardBody>
+        <CardFooter>
+          <p className="text-center text-xs text-muted">
+            No account?{" "}
+            <Link to="/signup" className="text-accent">
+              Sign up
+            </Link>
           </p>
-        </form>
-      </Window>
+        </CardFooter>
+      </Card>
     </div>
   );
 }

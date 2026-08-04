@@ -1,3 +1,5 @@
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../atoms/Select";
+
 interface SortOption {
   value: string;
   label: string;
@@ -11,15 +13,20 @@ interface SortSelectorProps {
 
 export default function SortSelector({ value, options, onChange }: SortSelectorProps) {
   return (
-    <div className="row">
-      <label htmlFor="sort-select">Sort by:</label>
-      <select id="sort-select" value={value} onChange={(e) => onChange(e.target.value)}>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+    <div className="flex items-center gap-3">
+      <span className="text-[11px] font-medium uppercase tracking-widest text-muted">Sort by</span>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger aria-label="Sort by">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   );
 }

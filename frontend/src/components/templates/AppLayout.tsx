@@ -1,18 +1,23 @@
 import { Outlet } from "react-router-dom";
-import TitleBar from "../atoms/TitleBar";
 import Header from "../organisms/Header";
+import Toaster from "../atoms/Toaster";
 
 export default function AppLayout() {
   return (
-    <div className="app-window window">
-      <TitleBar title="0shared" />
+    <div className="flex min-h-screen flex-col bg-background">
       <Header />
-      <main className="app-body sunken-panel">
+      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">
         <Outlet />
       </main>
-      <div className="status-bar">
-        <div className="status-bar-field">Ready</div>
-      </div>
+      <footer className="border-t border-border">
+        <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-2 px-4 py-4 text-[11px] uppercase tracking-widest text-muted">
+          <span>
+            <span className="text-accent">0</span>shared — share files, zero hassle.
+          </span>
+          <span>© {new Date().getFullYear()}</span>
+        </div>
+      </footer>
+      <Toaster />
     </div>
   );
 }

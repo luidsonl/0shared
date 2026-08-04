@@ -13,10 +13,14 @@ export default function SearchPage() {
 
   return (
     <>
-      <PageTitle>Search users</PageTitle>
+      <div className="mb-6">
+        <PageTitle>Search users</PageTitle>
+      </div>
       {q ? (
         <>
-          <p className="muted-text">Results for &ldquo;{q}&rdquo;</p>
+          <p className="mb-4 text-sm text-muted">
+            Results for <span className="text-foreground">&ldquo;{q}&rdquo;</span>
+          </p>
           {error ? (
             <ErrorText message={error} />
           ) : loading ? (
@@ -35,7 +39,7 @@ export default function SearchPage() {
           )}
         </>
       ) : (
-        <p className="muted-text">Type a username in the search box above.</p>
+        <p className="text-sm text-muted">Type a username in the search box above.</p>
       )}
     </>
   );
