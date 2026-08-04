@@ -35,6 +35,12 @@ export function usePaginatedFiles<T extends FileItem | PublicFileItem>(
     fetcherRef.current = fetcher;
   });
 
+  // Callers pass reloadKey as an inline array literal (e.g. [sortBy, reloadKey]),
+  // so its identity changes on every render. Using the identity as an effect dep
+  // would fire the effect after every render, restarting the fetch forever.
+  // Serialize to a primitive so the effect only reruns when the value changes.
+  const reloadKeyJson = JSON.stringify(reloadKey);
+
   const load = useCallback(async (token: string | null, reset: boolean) => {
     if (reset) {
       setHistory([]);
@@ -60,7 +66,7 @@ export function usePaginatedFiles<T extends FileItem | PublicFileItem>(
 
   useEffect(() => {
     void load(null, true);
-  }, [reloadKey, load]);
+  }, [reloadKeyJson, load]);
 
   const nextPage = useCallback(() => {
     setHistory((h) => [...h, nextToken ?? ""]);

@@ -11,9 +11,10 @@ interface FileListProps {
   files: Array<PublicFileItem | FileItem>;
   showOwner?: boolean;
   loading?: boolean;
+  onDelete?: (file: PublicFileItem | FileItem) => void;
 }
 
-export default function FileList({ files, showOwner = false, loading = false }: FileListProps) {
+export default function FileList({ files, showOwner = false, loading = false, onDelete }: FileListProps) {
   const [error, setError] = useState<string | null>(null);
 
   async function handleDownload(file: PublicFileItem | FileItem) {
@@ -45,7 +46,7 @@ export default function FileList({ files, showOwner = false, loading = false }: 
         </thead>
         <tbody>
           {files.map((file) => (
-            <FileRow key={file.fileId} file={file} showOwner={showOwner} onDownload={handleDownload} />
+            <FileRow key={file.fileId} file={file} showOwner={showOwner} onDownload={handleDownload} onDelete={onDelete} />
           ))}
         </tbody>
       </table>
