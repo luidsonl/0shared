@@ -4,8 +4,8 @@ import {
   DynamoDBDocumentClient,
   GetCommand,
 } from "@aws-sdk/lib-dynamodb";
-import { S3Client, HeadObjectCommand, DeleteObjectCommand, ListMultipartUploadsCommand } from "@aws-sdk/client-s3";
-import { api, randomId, sleep, purgeUser } from "./helpers.mjs";
+import { S3Client, HeadObjectCommand, ListMultipartUploadsCommand } from "@aws-sdk/client-s3";
+import { api, randomId, sleep, purgeFile, purgeUser } from "./helpers.mjs";
 
 const TABLE = process.env.DYNAMODB_TABLE || "0shared";
 const BUCKET = process.env.FILES_BUCKET || "luidsonl-0shared-files";
@@ -97,12 +97,14 @@ describe("Upload API", () => {
 
   describe("Upload complete (E2E)", () => {
     let uploadedKey;
+    let uploadedFileId;
 
     it("uploads to S3 and confirms object exists", async () => {
       const res = await api("POST", "/api/upload", { filename: "e2e-test.txt" }, token);
       expect(res.status).to.equal(200);
       const { url, key, fileId } = res.body;
       uploadedKey = key;
+      uploadedFileId = fileId;
 
       const content = "Hello from integration test!";
       const putRes = await fetch(url, {
@@ -148,9 +150,7 @@ describe("Upload API", () => {
     });
 
     after(async () => {
-      if (uploadedKey) {
-        await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: uploadedKey })).catch(() => {});
-      }
+      await purgeFile(userId, uploadedFileId, uploadedKey);
     });
   });
 
@@ -273,6 +273,9 @@ describe("Upload API", () => {
   });
 
   describe("POST /api/upload/complete", () => {
+    let completedKey;
+    let completedFileId;
+
     it("completes multipart upload with valid data", async () => {
       const fileSize = PART_SIZE; // exactly 1 part
       const initiateRes = await api(
@@ -282,7 +285,9 @@ describe("Upload API", () => {
         token
       );
       expect(initiateRes.status).to.equal(200);
-      const { uploadId, key, parts } = initiateRes.body;
+      const { uploadId, key, fileId, parts } = initiateRes.body;
+      completedKey = key;
+      completedFileId = fileId;
 
       const content = new Uint8Array(PART_SIZE);
       const putRes = await fetch(parts[0].url, {
@@ -360,6 +365,10 @@ describe("Upload API", () => {
       );
       expect(res.status).to.equal(400);
       expect(res.body.error).to.include("Missing required fields");
+    });
+
+    after(async () => {
+      await purgeFile(userId, completedFileId, completedKey);
     });
   });
 
@@ -441,6 +450,7 @@ describe("Upload API", () => {
 
   describe("Multipart Upload (E2E)", () => {
     let uploadedKey;
+    let uploadedFileId;
 
     it("uploads file via multipart and verifies in S3", async () => {
       const fileSize = PART_SIZE;
@@ -451,8 +461,9 @@ describe("Upload API", () => {
         token
       );
       expect(initiateRes.status).to.equal(200);
-      const { uploadId, key, parts } = initiateRes.body;
+      const { uploadId, key, fileId, parts } = initiateRes.body;
       uploadedKey = key;
+      uploadedFileId = fileId;
 
       const content = new Uint8Array(PART_SIZE);
       const putRes = await fetch(parts[0].url, {
@@ -526,9 +537,7 @@ describe("Upload API", () => {
     });
 
     after(async () => {
-      if (uploadedKey) {
-        await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: uploadedKey })).catch(() => {});
-      }
+      await purgeFile(userId, uploadedFileId, uploadedKey);
     });
   });
 });

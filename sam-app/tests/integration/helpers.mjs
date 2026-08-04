@@ -1,5 +1,10 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, QueryCommand, DeleteCommand } from "@aws-sdk/lib-dynamodb";
+import {
+  DynamoDBDocumentClient,
+  GetCommand,
+  QueryCommand,
+  DeleteCommand,
+} from "@aws-sdk/lib-dynamodb";
 import { S3Client, DeleteObjectCommand } from "@aws-sdk/client-s3";
 
 const BASE = process.env.API_ENDPOINT || "http://127.0.0.1:3000";
@@ -27,6 +32,31 @@ export function randomId() {
 
 export function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+/**
+ * Cleans up a completed upload. Registration in DynamoDB happens asynchronously
+ * (S3 event → SQS → register lambda), so we wait for the FILE# record before
+ * deleting it, and only delete the S3 object afterwards to avoid the register
+ * lambda failing a HeadObject on a deleted object.
+ */
+export async function purgeFile(userId, fileId, objectKey) {
+  if (!userId || !fileId) return;
+  const key = { PK: `USER#${userId}`, SK: `FILE#${fileId}` };
+  for (let i = 0; i < 10; i++) {
+    const result = await dynamo.send(new GetCommand({ TableName: TABLE, Key: key }));
+    if (result.Item) {
+      await dynamo.send(new DeleteCommand({ TableName: TABLE, Key: key })).catch(() => {});
+      if (objectKey) {
+        await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: objectKey })).catch(() => {});
+      }
+      return;
+    }
+    await sleep(1000);
+  }
+  if (objectKey) {
+    await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: objectKey })).catch(() => {});
+  }
 }
 
 /**
