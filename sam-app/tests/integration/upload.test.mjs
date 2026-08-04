@@ -169,7 +169,7 @@ describe("Upload API", () => {
       const res = await api("POST", "/api/upload", { filename: "expired.txt" }, token);
       expect(res.status).to.equal(200);
 
-      const expiredUrl = res.body.url.replace("X-Amz-Expires=300", "X-Amz-Expires=1");
+      const expiredUrl = res.body.url.replace(/X-Amz-Expires=\d+/, "X-Amz-Expires=1");
       await sleep(2000);
 
       const putRes = await fetch(expiredUrl, {

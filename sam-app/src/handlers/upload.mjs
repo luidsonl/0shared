@@ -26,7 +26,10 @@ const MAX_SIZE = 1024 * 1024 * 1024; // 1 GB for simple PUT
 const MULTIPART_THRESHOLD = 100 * 1024 * 1024; // 100 MB - use multipart above this
 const MULTIPART_MAX_SIZE = 50 * 1024 * 1024 * 1024; // 50 GB max for multipart
 const DEFAULT_PART_SIZE = 5 * 1024 * 1024; // 5 MB minimum part size
-const URL_TTL = 300; // 5 minutes
+// Multipart parts are presigned up-front and uploaded sequentially, so the TTL
+// must cover the whole upload duration (e.g. a 50 GB file on a slow link).
+// 3600 s = 1 hour; S3 allows up to 7 days.
+const URL_TTL = 3600;
 
 function sanitizeFilename(name) {
   if (!name) return "unnamed";
