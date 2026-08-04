@@ -3,8 +3,10 @@ import type { ReactNode } from "react";
 import { toast } from "sonner";
 import Button, { type ButtonProps } from "../atoms/Button";
 import ErrorText from "../atoms/ErrorText";
+import Progress from "../atoms/Progress";
+import Spinner from "../atoms/Spinner";
 import { Dialog, DialogBody, DialogContent, DialogFooter } from "../atoms/Dialog";
-import { simpleUpload } from "../../api";
+import { uploadFileToStorage } from "../../api/upload";
 import { toMessage } from "../../lib/errors";
 
 interface UploadButtonProps extends Pick<ButtonProps, "size" | "variant"> {
@@ -12,6 +14,8 @@ interface UploadButtonProps extends Pick<ButtonProps, "size" | "variant"> {
   className?: string;
   children?: ReactNode;
 }
+
+type Phase = "idle" | "preparing" | "uploading" | "error";
 
 export default function UploadButton({
   onUploaded,
@@ -22,47 +26,71 @@ export default function UploadButton({
 }: UploadButtonProps) {
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const busy = phase === "preparing" || phase === "uploading";
 
   async function handleUpload() {
     if (!file) return;
-    setUploading(true);
+    setPhase("preparing");
+    setProgress(0);
     setError(null);
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
-      const res = await simpleUpload({
-        filename: file.name,
-        contentType: file.type || undefined,
+      await uploadFileToStorage(file, {
+        signal: controller.signal,
+        onStatus: setPhase,
+        onProgress: (p) => setProgress(p.percent),
       });
-      const response = await fetch(res.url, {
-        method: "PUT",
-        body: file,
-        headers: { "Content-Type": file.type || "application/octet-stream" },
-      });
-      if (!response.ok) throw new Error(`Upload failed with status ${response.status}`);
-      toast.success("File uploaded", {
-        description: file.name,
-      });
+      toast.success("File uploaded", { description: file.name });
       onUploaded?.();
       setOpen(false);
       setFile(null);
     } catch (err) {
-      setError(toMessage(err));
+      setPhase("error");
+      setError(
+        err instanceof DOMException && err.name === "AbortError"
+          ? "Upload cancelled"
+          : toMessage(err),
+      );
     } finally {
-      setUploading(false);
+      abortRef.current = null;
     }
+  }
+
+  function handleCancel() {
+    if (busy) {
+      abortRef.current?.abort();
+      return;
+    }
+    resetAndClose();
   }
 
   function handlePick(e: React.ChangeEvent<HTMLInputElement>) {
     setError(null);
+    setPhase("idle");
     setFile(e.target.files?.[0] ?? null);
   }
 
   function resetAndClose() {
     setError(null);
     setFile(null);
+    setPhase("idle");
+    setProgress(0);
     setOpen(false);
+  }
+
+  function handleOpenChange(next: boolean) {
+    if (next) {
+      setOpen(true);
+      return;
+    }
+    if (busy) return;
+    resetAndClose();
   }
 
   return (
@@ -70,16 +98,16 @@ export default function UploadButton({
       <Button onClick={() => setOpen(true)} size={size} variant={variant} className={className}>
         {children ?? "Upload"}
       </Button>
-      <Dialog open={open} onOpenChange={(next) => (next ? setOpen(true) : resetAndClose())}>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent title="Upload file">
           <DialogBody>
-            <p className="text-sm text-muted">Select a file to upload. Maximum size: 1 GB.</p>
+            <p className="text-sm text-muted">Select a file to upload. Up to 50 GB.</p>
             <div className="flex items-center gap-3">
               <input
-                ref={inputRef}
                 type="file"
                 onChange={handlePick}
-                className="max-w-full text-sm text-foreground file:mr-3 file:border file:border-border file:bg-surface-elevated file:px-3 file:py-1.5 file:text-xs file:font-semibold file:uppercase file:tracking-widest file:text-accent hover:file:border-muted"
+                disabled={busy}
+                className="max-w-full text-sm text-foreground file:mr-3 file:border file:border-border file:bg-surface-elevated file:px-3 file:py-1.5 file:text-xs file:font-semibold file:uppercase file:tracking-widest file:text-accent hover:file:border-muted disabled:opacity-50"
               />
             </div>
             {file && (
@@ -88,14 +116,14 @@ export default function UploadButton({
                 {(file.size / 1024 / 1024).toFixed(2)} MB)
               </p>
             )}
+            {phase === "preparing" && <Spinner label="Preparing upload…" />}
+            {phase === "uploading" && <Progress value={progress} label={`${progress}%`} />}
             {error && <ErrorText message={error} />}
           </DialogBody>
           <DialogFooter>
-            <Button variant="ghost" onClick={resetAndClose} disabled={uploading}>
-              Cancel
-            </Button>
-            <Button variant="accent" onClick={handleUpload} disabled={!file || uploading}>
-              {uploading ? "Uploading..." : "Upload"}
+            <Button variant="ghost" onClick={handleCancel}>Cancel</Button>
+            <Button variant="accent" onClick={handleUpload} disabled={!file || busy}>
+              {busy ? "Uploading…" : "Upload"}
             </Button>
           </DialogFooter>
         </DialogContent>

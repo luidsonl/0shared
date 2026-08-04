@@ -76,6 +76,10 @@ export function multipartCompleteResponse(key) {
   return ok({ ok: true, key });
 }
 
+export function multipartAbortResponse(key) {
+  return ok({ message: "Multipart upload aborted", key });
+}
+
 export function downloadResponse({ url, filename, contentType, size, downloadCount }) {
   return ok({ url, filename, contentType, size, downloadCount });
 }

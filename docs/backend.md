@@ -18,6 +18,7 @@ The backend is a set of stateless Lambda functions deployed via AWS SAM and expo
 | `POST` | `/api/upload` | `upload.mjs` | Yes | Generate presigned S3 upload URL (simple, < 1 GB) |
 | `POST` | `/api/upload/initiate` | `upload.mjs` | Yes | Initiate multipart upload (large files, up to 50 GB) |
 | `POST` | `/api/upload/complete` | `upload.mjs` | Yes | Complete multipart upload |
+| `POST` | `/api/upload/abort` | `upload.mjs` | Yes | Abort an in-progress multipart upload (`uploadId`, `key`) |
 | `GET` | `/api/download/:fileId` | `download.mjs` | No | Generate presigned S3 download URL |
 | `GET` | `/api/users/search` | `users.mjs` | Yes | Search users by username prefix |
 | `GET` | `/api/users/:userId` | `users.mjs` | Yes | Get user profile by ID |

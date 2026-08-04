@@ -4,7 +4,7 @@ import {
   DynamoDBDocumentClient,
   GetCommand,
 } from "@aws-sdk/lib-dynamodb";
-import { S3Client, HeadObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, HeadObjectCommand, DeleteObjectCommand, ListMultipartUploadsCommand } from "@aws-sdk/client-s3";
 import { api, randomId, sleep, purgeUser } from "./helpers.mjs";
 
 const TABLE = process.env.DYNAMODB_TABLE || "0shared";
@@ -358,6 +358,82 @@ describe("Upload API", () => {
         { uploadId: "fake", key: "fake", parts: [] },
         token
       );
+      expect(res.status).to.equal(400);
+      expect(res.body.error).to.include("Missing required fields");
+    });
+  });
+
+  describe("POST /api/upload/abort", () => {
+    it("aborts an in-progress multipart upload", async () => {
+      const initiateRes = await api(
+        "POST",
+        "/api/upload/initiate",
+        { filename: "abort-test.bin", fileSize: PART_SIZE * 3 },
+        token
+      );
+      expect(initiateRes.status).to.equal(200);
+      const { uploadId, key, parts } = initiateRes.body;
+
+      const content = new Uint8Array(PART_SIZE);
+      await fetch(parts[0].url, {
+        method: "PUT",
+        headers: { "Content-Type": "application/octet-stream" },
+        body: content,
+      });
+
+      const abortRes = await api(
+        "POST",
+        "/api/upload/abort",
+        { uploadId, key },
+        token
+      );
+      expect(abortRes.status).to.equal(200);
+      expect(abortRes.body.message).to.include("aborted");
+      expect(abortRes.body.key).to.equal(key);
+    });
+
+    it("removes the multipart upload from S3", async () => {
+      const initiateRes = await api(
+        "POST",
+        "/api/upload/initiate",
+        { filename: "abort-verify.bin", fileSize: PART_SIZE * 2 },
+        token
+      );
+      expect(initiateRes.status).to.equal(200);
+      const { uploadId, key } = initiateRes.body;
+
+      const abortRes = await api("POST", "/api/upload/abort", { uploadId, key }, token);
+      expect(abortRes.status).to.equal(200);
+
+      let found = true;
+      for (let i = 0; i < 15 && found; i++) {
+        const list = await s3.send(new ListMultipartUploadsCommand({
+          Bucket: BUCKET,
+          Prefix: key,
+        }));
+        found = (list.Uploads || []).some((u) => u.UploadId === uploadId);
+        if (found) await sleep(1000);
+      }
+      expect(found).to.equal(false);
+    });
+
+    it("rejects without token with 401", async () => {
+      const res = await api("POST", "/api/upload/abort", {
+        uploadId: "fake",
+        key: "fake",
+      });
+      expect(res.status).to.equal(401);
+      expect(res.body.error).to.equal("Unauthorized");
+    });
+
+    it("rejects without uploadId with 400", async () => {
+      const res = await api("POST", "/api/upload/abort", { key: "fake" }, token);
+      expect(res.status).to.equal(400);
+      expect(res.body.error).to.include("Missing required fields");
+    });
+
+    it("rejects without key with 400", async () => {
+      const res = await api("POST", "/api/upload/abort", { uploadId: "fake" }, token);
       expect(res.status).to.equal(400);
       expect(res.body.error).to.include("Missing required fields");
     });

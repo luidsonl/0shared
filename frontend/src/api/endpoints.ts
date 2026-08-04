@@ -7,6 +7,7 @@ import type {
   LoginRequest,
   LoginResponse,
   MeResponse,
+  MultipartAbortResponse,
   MultipartCompleteRequest,
   MultipartCompleteResponse,
   MultipartInitiateRequest,
@@ -77,6 +78,10 @@ export async function multipartInitiate(body: MultipartInitiateRequest): Promise
 
 export async function multipartComplete(body: MultipartCompleteRequest): Promise<MultipartCompleteResponse> {
   return apiFetch<MultipartCompleteResponse>("/api/upload/complete", { method: "POST", body, token: getToken() });
+}
+
+export async function abortMultipartUpload(body: { uploadId: string; key: string }): Promise<MultipartAbortResponse> {
+  return apiFetch<MultipartAbortResponse>("/api/upload/abort", { method: "POST", body, token: getToken() });
 }
 
 export async function download(fileId: string): Promise<DownloadResponse> {

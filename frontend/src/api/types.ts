@@ -120,6 +120,11 @@ export interface MultipartCompleteResponse {
   key: string;
 }
 
+export interface MultipartAbortResponse {
+  message: string;
+  key: string;
+}
+
 export interface DownloadResponse {
   url: string;
   filename: string;

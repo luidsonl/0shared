@@ -58,7 +58,7 @@ Atomic design, aligned with the design-system layers:
 components/
 ├── brand/        # Logo, Wordmark
 ├── atoms/        # Button, TextInput, Field, Card, Dialog, Select, Spinner,
-│                 # EmptyState, ErrorText, PageTitle, Badge, Avatar, Toaster
+│                 # Progress, EmptyState, ErrorText, PageTitle, Badge, Avatar, Toaster
 ├── molecules/    # SearchBar, Pagination, SortSelector, UserMenu, FileRow
 ├── organisms/    # Header, FileList, LoginForm, SignupForm, UploadButton
 └── templates/    # AppLayout
@@ -75,6 +75,7 @@ components/
 | `Dialog` + `DialogTrigger` + `DialogContent` + `DialogBody` + `DialogFooter` | Radix dialog (title bar, overlay, focus trap). Controlled via `open`/`onOpenChange`. |
 | `Select` + `SelectTrigger` + `SelectContent` + `SelectItem` | Radix select. |
 | `Spinner` | `label` prop, `className` |
+| `Progress` | `value` (0–100), optional `label` (e.g. `42%`), `className` |
 | `Badge` | `variant`: `neutral`/`accent`/`primary`/`success`/`warning`/`danger` |
 | `Avatar` | Initials square; `username`, `className` |
 | `ErrorText` | Renders `ERROR: {message}` in danger. |

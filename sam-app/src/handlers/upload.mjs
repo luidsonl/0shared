@@ -4,6 +4,7 @@ import {
   CreateMultipartUploadCommand,
   UploadPartCommand,
   CompleteMultipartUploadCommand,
+  AbortMultipartUploadCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { requireAuth } from "./middleware/auth.mjs";
@@ -16,6 +17,7 @@ import {
   simpleUploadResponse,
   multipartInitiateResponse,
   multipartCompleteResponse,
+  multipartAbortResponse,
 } from "./lib/dto.mjs";
 
 const s3 = new S3Client({});
@@ -149,6 +151,22 @@ async function handleMultipartComplete(uploadId, key, parts) {
   return multipartCompleteResponse(key);
 }
 
+async function handleMultipartAbort(uploadId, key) {
+  if (!uploadId || !key) {
+    return badRequest("Missing required fields: uploadId, key");
+  }
+
+  const abortCommand = new AbortMultipartUploadCommand({
+    Bucket: BUCKET,
+    Key: key,
+    UploadId: uploadId,
+  });
+
+  await s3.send(abortCommand);
+
+  return multipartAbortResponse(key);
+}
+
 export async function lambdaHandler(event) {
   try {
     const session = await requireAuth(event);
@@ -166,6 +184,11 @@ export async function lambdaHandler(event) {
     if (path.endsWith("/upload/complete") && method === "POST") {
       const { uploadId, key, parts } = JSON.parse(event.body || "{}");
       return await handleMultipartComplete(uploadId, key, parts);
+    }
+
+    if (path.endsWith("/upload/abort") && method === "POST") {
+      const { uploadId, key } = JSON.parse(event.body || "{}");
+      return await handleMultipartAbort(uploadId, key);
     }
 
     if (path.endsWith("/upload") && method === "POST") {

@@ -1,17 +1,13 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
-import Button from "../components/atoms/Button";
 import PageTitle from "../components/atoms/PageTitle";
 import ErrorText from "../components/atoms/ErrorText";
 import FileList from "../components/organisms/FileList";
 import Pagination from "../components/molecules/Pagination";
 import SortSelector from "../components/molecules/SortSelector";
-import UploadButton from "../components/organisms/UploadButton";
 import { Logo, Wordmark } from "../components/brand/Logo";
 import { usePaginatedFiles } from "../hooks/usePaginatedFiles";
 import { listFiles } from "../api";
 import type { PublicFileItem, SortBy } from "../api";
-import { useAuth } from "../context/useAuth";
 
 const SORT_OPTIONS = [
   { value: "downloadCount", label: "Most downloaded" },
@@ -19,9 +15,8 @@ const SORT_OPTIONS = [
 ];
 
 export default function HomePage() {
-  const { token } = useAuth();
   const [sortBy, setSortBy] = useState<SortBy>("downloadCount");
-  const [reloadKey, setReloadKey] = useState(0);
+  const reloadKey = 0;
   const { items, nextToken, loading, error, hasPrev, nextPage, prevPage } =
     usePaginatedFiles<PublicFileItem>(
       (next) => listFiles({ sortBy, nextToken: next, limit: 20 }),
