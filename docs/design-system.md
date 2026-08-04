@@ -59,8 +59,8 @@ components/
 ├── brand/        # Logo, Wordmark
 ├── atoms/        # Button, TextInput, Field, Card, Dialog, Select, Spinner,
 │                 # EmptyState, ErrorText, PageTitle, Badge, Avatar, Toaster
-├── molecules/    # SearchBar, Pagination, SortSelector, UserMenu, UserCard, FileRow
-├── organisms/    # Header, FileList, UserList, LoginForm, SignupForm, UploadButton
+├── molecules/    # SearchBar, Pagination, SortSelector, UserMenu, FileRow
+├── organisms/    # Header, FileList, LoginForm, SignupForm, UploadButton
 └── templates/    # AppLayout
 ```
 

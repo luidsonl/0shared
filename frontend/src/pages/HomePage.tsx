@@ -42,23 +42,6 @@ export default function HomePage() {
             </p>
           </div>
         </div>
-        <div className="mt-6 flex flex-wrap items-center gap-3">
-          {token ? (
-            <UploadButton
-              variant="accent"
-              onUploaded={() => setReloadKey((k) => k + 1)}
-            />
-          ) : (
-            <>
-              <Link to="/signup">
-                <Button variant="accent">Sign up</Button>
-              </Link>
-              <Link to="/login">
-                <Button variant="ghost">Log in</Button>
-              </Link>
-            </>
-          )}
-        </div>
       </section>
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">

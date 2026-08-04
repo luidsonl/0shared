@@ -66,10 +66,6 @@ export interface PublicFileListResponse extends Pagination {
   files: PublicFileItem[];
 }
 
-export interface UserSearchResponse extends Pagination {
-  users: { userId: string; username: string }[];
-}
-
 export interface UserProfile {
   userId: string;
   username: string;

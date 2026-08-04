@@ -136,14 +136,14 @@ One extra `GetItem` after the lookup, but keeps the PK decoupled from the userna
 | `gsiname_pk` | HASH | `NAME#USER` or `NAME#FILE#{shard}` |
 | `gsiname_sk` | RANGE | `{name_lower}#{entity_id}` |
 
-File names are sharded by first character hex (`NAME#FILE#6a`, `NAME#FILE#72`) to avoid a single hot partition.
+File names are sharded by the first character of the lowercased filename (`NAME#FILE#r`), with `NAME#FILE#_` as the fallback for non-alphanumeric or empty first characters. This lets a name-prefix search (`GET /api/files/search`) hit a single partition: one `QueryCommand` with `begins_with(gsiname_sk, {prefix})`, then `BatchGetItem` the full file entities, sort by download count, and paginate in memory. The shard function lives in `terraform/aws-app/src/register-upload.mjs` (write) and `sam-app/src/handlers/lib/dynamo-client.mjs` (search) and must stay in sync.
 
 | gsiname_pk | gsiname_sk |
 |------------|------------|
 | NAME#USER | joaosilva#uuid-1 |
 | NAME#USER | mariacosta#uuid-2 |
-| NAME#FILE#72 | relatorio.pdf#file-uuid |
-| NAME#FILE#66 | foto.png#file-uuid |
+| NAME#FILE#r | relatorio.pdf#file-uuid |
+| NAME#FILE#f | foto.png#file-uuid |
 
 ### UploadDateIndex - Files by upload date
 
@@ -243,7 +243,7 @@ Allows looking up a file by its ID alone, without knowing the owner. Used by the
 | 3b | List user's files (by downloads desc) | UserFileDownloadIndex | `owner_user_id = :userId, scan_forward=false` |
 | 4 | List all users | NameSearch | `gsiname_pk = NAME#USER` |
 | 5 | Search users by username | NameSearch | `gsiname_pk = NAME#USER, begins_with(gsiname_sk, {prefix})` |
-| 6 | Search files by name | NameSearch | `gsiname_pk = NAME#FILE#{shard}, begins_with(gsiname_sk, {prefix})` |
+| 6 | Search files by name | NameSearch | `gsiname_pk = NAME#FILE#{first char of lowercased name}, begins_with(gsiname_sk, {prefix})` → `BatchGetItem` full entities, sort by download count |
 | 7 | List all files by upload date | UploadDateIndex | `gsidate_pk = FILE#DATE, scan_forward=false` → `BatchGetItem` full entities |
 | 8 | List most downloaded files | DownloadCountIndex | `gsidown_pk = FILE#DOWN, scan_forward=false` → `BatchGetItem` full entities |
 | 9 | Get file by ID | FileIdIndex | `file_id = :fileId` → returns file item with all attributes |

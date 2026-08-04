@@ -19,7 +19,6 @@ import type {
   SortBy,
   SortOrder,
   UserProfile,
-  UserSearchResponse,
 } from "./types";
 
 export async function health(): Promise<HealthResponse> {
@@ -59,11 +58,9 @@ export async function listUserFiles(userId: string, params: ListFilesParams = {}
   return apiFetch<FileListResponse>(`/api/users/${encodeURIComponent(userId)}/files${query}`, { token: getToken() });
 }
 
-export async function searchUsers(q: string, nextToken?: string | null): Promise<UserSearchResponse> {
-  const params: Record<string, string | undefined> = { q };
-  if (nextToken) params.nextToken = nextToken;
-  const query = buildQuery(params);
-  return apiFetch<UserSearchResponse>(`/api/users/search${query}`, { token: getToken() });
+export async function searchFiles(q: string, params: ListFilesParams = {}): Promise<PublicFileListResponse> {
+  const query = buildQuery({ q, ...params });
+  return apiFetch<PublicFileListResponse>(`/api/files/search${query}`, { token: getToken() });
 }
 
 export async function getUser(userId: string): Promise<UserProfile> {

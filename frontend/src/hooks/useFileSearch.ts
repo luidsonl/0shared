@@ -1,14 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { searchUsers } from "../api";
+import { searchFiles } from "../api";
+import type { PublicFileItem } from "../api";
 import { toMessage } from "../lib/errors";
 
-export interface SearchUser {
-  userId: string;
-  username: string;
-}
-
 interface SearchState {
-  users: SearchUser[];
+  files: PublicFileItem[];
   nextToken: string | null;
   loading: boolean;
   error: string | null;
@@ -17,8 +13,8 @@ interface SearchState {
   prevPage: () => void;
 }
 
-export function useUserSearch(q: string): SearchState {
-  const [users, setUsers] = useState<SearchUser[]>([]);
+export function useFileSearch(q: string): SearchState {
+  const [files, setFiles] = useState<PublicFileItem[]>([]);
   const [nextToken, setNextToken] = useState<string | null>(null);
   const [history, setHistory] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,12 +29,12 @@ export function useUserSearch(q: string): SearchState {
       setLoading(true);
       setError(null);
       try {
-        const res = await searchUsers(q, token);
-        setUsers(res.users);
+        const res = await searchFiles(q, { nextToken: token, limit: 20 });
+        setFiles(res.files);
         setNextToken(res.nextToken);
       } catch (err) {
         setError(toMessage(err));
-        setUsers([]);
+        setFiles([]);
         setNextToken(null);
       } finally {
         setLoading(false);
@@ -62,5 +58,5 @@ export function useUserSearch(q: string): SearchState {
     void load(target, false);
   }, [history, load]);
 
-  return { users, nextToken, loading, error, hasPrev: history.length > 0, nextPage, prevPage };
+  return { files, nextToken, loading, error, hasPrev: history.length > 0, nextPage, prevPage };
 }

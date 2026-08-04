@@ -23,6 +23,7 @@ The backend is a set of stateless Lambda functions deployed via AWS SAM and expo
 | `GET` | `/api/users/:userId` | `users.mjs` | Yes | Get user profile by ID |
 | `GET` | `/api/users/:userId/files` | `users.mjs` | Yes | List user uploads — paginated, sortable (`sortBy`: `uploadDate`\|`name`\|`downloadCount`, `sortOrder`: `asc`\|`desc`) |
 | `GET` | `/api/files` | `files.mjs` | No | List all files — paginated, sortable (`sortBy`: `downloadCount` (default) \| `uploadDate`, `sortOrder`: `asc`\|`desc`) |
+| `GET` | `/api/files/search` | `files.mjs` | No | Search files by name prefix — public, sorted by download count, paginated (`q`, `limit`, `nextToken`) |
 | `DELETE` | `/api/files/:fileId` | `files.mjs` | Yes | Delete a file (owner only) |
 
 ---

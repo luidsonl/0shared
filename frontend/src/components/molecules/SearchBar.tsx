@@ -21,8 +21,8 @@ export default function SearchBar() {
         type="search"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder="Search users"
-        aria-label="Search users"
+        placeholder="Search files"
+        aria-label="Search files"
         className="h-8 w-44 sm:w-56"
       />
       <Button type="submit" size="sm" variant="ghost" aria-label="Search">

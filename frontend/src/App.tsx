@@ -27,14 +27,7 @@ function App() {
         <Routes>
           <Route element={<AppLayout />}>
             <Route index element={<HomePage />} />
-            <Route
-              path="search"
-              element={
-                <RequireAuth>
-                  <SearchPage />
-                </RequireAuth>
-              }
-            />
+            <Route path="search" element={<SearchPage />} />
             <Route
               path="users/:userId"
               element={

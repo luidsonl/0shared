@@ -3,18 +3,18 @@ import PageTitle from "../components/atoms/PageTitle";
 import ErrorText from "../components/atoms/ErrorText";
 import Spinner from "../components/atoms/Spinner";
 import Pagination from "../components/molecules/Pagination";
-import UserList from "../components/organisms/UserList";
-import { useUserSearch } from "../hooks/useUserSearch";
+import FileList from "../components/organisms/FileList";
+import { useFileSearch } from "../hooks/useFileSearch";
 
 export default function SearchPage() {
   const [searchParams] = useSearchParams();
   const q = searchParams.get("q") ?? "";
-  const { users, nextToken, loading, error, hasPrev, nextPage, prevPage } = useUserSearch(q);
+  const { files, nextToken, loading, error, hasPrev, nextPage, prevPage } = useFileSearch(q);
 
   return (
     <>
       <div className="mb-6">
-        <PageTitle>Search users</PageTitle>
+        <PageTitle>Search files</PageTitle>
       </div>
       {q ? (
         <>
@@ -27,7 +27,7 @@ export default function SearchPage() {
             <Spinner />
           ) : (
             <>
-              <UserList users={users} />
+              <FileList files={files} showOwner />
               <Pagination
                 hasPrev={hasPrev}
                 hasNext={!!nextToken}
@@ -39,7 +39,7 @@ export default function SearchPage() {
           )}
         </>
       ) : (
-        <p className="text-sm text-muted">Type a username in the search box above.</p>
+        <p className="text-sm text-muted">Type a filename in the search box above.</p>
       )}
     </>
   );
