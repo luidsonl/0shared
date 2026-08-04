@@ -4,6 +4,11 @@
 
 ---
 
+![Screenshot 1](docs/img/ss-01.png)
+![Screenshot 2](docs/img/ss-02.png)
+
+---
+
 ## Architecture Overview
 
 The system uses a serverless architecture for storage, routing, and backend processing.
