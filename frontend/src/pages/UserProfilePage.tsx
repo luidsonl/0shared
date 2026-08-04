@@ -9,6 +9,7 @@ import Card, { CardBody } from "../components/atoms/Card";
 import FileList from "../components/organisms/FileList";
 import Pagination from "../components/molecules/Pagination";
 import { usePaginatedFiles } from "../hooks/usePaginatedFiles";
+import { useRefreshOnUpload } from "../hooks/useRefreshOnUpload";
 import { getUser, listUserFiles } from "../api";
 import type { FileItem, UserProfile } from "../api";
 import { formatDate } from "../lib/format";
@@ -19,11 +20,13 @@ export default function UserProfilePage() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
   const [loadedUserId, setLoadedUserId] = useState<string | null>(null);
+  const [tick, setTick] = useState(0);
+  useRefreshOnUpload(() => setTick((t) => t + 1));
 
   const { items, nextToken, loading, error, hasPrev, nextPage, prevPage } =
     usePaginatedFiles<FileItem>(
       (next) => listUserFiles(userId, { nextToken: next, limit: 20 }),
-      userId,
+      [userId, tick],
     );
 
   useEffect(() => {

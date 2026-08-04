@@ -6,6 +6,7 @@ import Pagination from "../components/molecules/Pagination";
 import SortSelector from "../components/molecules/SortSelector";
 import { Logo, Wordmark } from "../components/brand/Logo";
 import { usePaginatedFiles } from "../hooks/usePaginatedFiles";
+import { useRefreshOnUpload } from "../hooks/useRefreshOnUpload";
 import { listFiles } from "../api";
 import type { PublicFileItem, SortBy } from "../api";
 
@@ -16,7 +17,8 @@ const SORT_OPTIONS = [
 
 export default function HomePage() {
   const [sortBy, setSortBy] = useState<SortBy>("downloadCount");
-  const reloadKey = 0;
+  const [reloadKey, setReloadKey] = useState(0);
+  useRefreshOnUpload(() => setReloadKey((k) => k + 1));
   const { items, nextToken, loading, error, hasPrev, nextPage, prevPage } =
     usePaginatedFiles<PublicFileItem>(
       (next) => listFiles({ sortBy, nextToken: next, limit: 20 }),

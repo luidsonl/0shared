@@ -7,6 +7,7 @@ import Progress from "../atoms/Progress";
 import Spinner from "../atoms/Spinner";
 import { Dialog, DialogBody, DialogContent, DialogFooter } from "../atoms/Dialog";
 import { uploadFileToStorage } from "../../api/upload";
+import { dispatchFilesChanged } from "../../lib/events";
 import { toMessage } from "../../lib/errors";
 
 interface UploadButtonProps extends Pick<ButtonProps, "size" | "variant"> {
@@ -48,6 +49,7 @@ export default function UploadButton({
       });
       toast.success("File uploaded", { description: file.name });
       onUploaded?.();
+      dispatchFilesChanged();
       setOpen(false);
       setFile(null);
     } catch (err) {
