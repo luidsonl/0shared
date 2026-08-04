@@ -75,8 +75,29 @@ async function listFiles(event) {
   return fileListResponse(files, nextToken);
 }
 
+async function searchFiles(event) {
+  const params = event.queryStringParameters || {};
+  const q = (params.q || "").trim();
+  if (!q) return badRequest("Missing query parameter 'q'");
+
+  const limit = Math.min(Math.max(parseInt(params.limit, 10) || 20, 1), 100);
+  const exclusiveStartKey = params.nextToken
+    ? JSON.parse(Buffer.from(params.nextToken, "base64").toString("utf-8"))
+    : undefined;
+
+  const result = await db.searchFiles(q.toLowerCase(), limit, exclusiveStartKey);
+
+  const nextToken = result.LastEvaluatedKey
+    ? Buffer.from(JSON.stringify(result.LastEvaluatedKey)).toString("base64")
+    : null;
+
+  const files = (result.Items || []).map(publicFileItemResponse);
+  return fileListResponse(files, nextToken);
+}
+
 export async function lambdaHandler(event) {
   try {
+    if (event.httpMethod === "GET" && event.resource === "/api/files/search") return searchFiles(event);
     if (event.httpMethod === "GET" && event.resource === "/api/files") return listFiles(event);
     if (event.httpMethod === "DELETE") return deleteFile(event);
     return methodNotAllowed();

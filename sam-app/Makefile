@@ -48,7 +48,7 @@ test-aws:
 	API_ENDPOINT=$$(aws cloudformation describe-stacks \
 		--stack-name $(STACK_NAME) \
 		--query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" \
-		--output text) npm test
+		--output text) $(MAKE) test
 
 clean:
 	scripts/clean.sh

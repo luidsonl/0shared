@@ -161,24 +161,22 @@ export async function deleteSession(token) {
 async function batchGetItems(keys) {
   if (keys.length === 0) return [];
 
-  const batch = keys.slice(0, 100).map((key) => ({ PK: key.PK, SK: key.SK }));
-  const orderedIds = batch.map((key) => `${key.PK}#${key.SK}`);
   const found = [];
-
-  let request = { [TABLE]: { Keys: batch } };
-  for (let attempt = 0; attempt < 10 && request?.[TABLE]?.Keys?.length; attempt++) {
-    const result = await doc.send(new BatchGetCommand({ RequestItems: request }));
-    found.push(...(result.Responses?.[TABLE] || []));
-    request = result.UnprocessedKeys;
-    if (request?.[TABLE]?.Keys?.length) {
-      await new Promise((resolve) => setTimeout(resolve, 50 * (attempt + 1)));
+  for (let i = 0; i < keys.length; i += 100) {
+    const batch = keys.slice(i, i + 100).map((key) => ({ PK: key.PK, SK: key.SK }));
+    let request = { [TABLE]: { Keys: batch } };
+    for (let attempt = 0; attempt < 10 && request?.[TABLE]?.Keys?.length; attempt++) {
+      const result = await doc.send(new BatchGetCommand({ RequestItems: request }));
+      found.push(...(result.Responses?.[TABLE] || []));
+      request = result.UnprocessedKeys;
+      if (request?.[TABLE]?.Keys?.length) {
+        await new Promise((resolve) => setTimeout(resolve, 50 * (attempt + 1)));
+      }
     }
   }
 
   const foundByKey = new Map(found.map((item) => [`${item.PK}#${item.SK}`, item]));
-  return orderedIds
-    .map((id) => foundByKey.get(id))
-    .filter(Boolean);
+  return keys.map((key) => foundByKey.get(`${key.PK}#${key.SK}`)).filter(Boolean);
 }
 
 export async function listAllFiles(limit, exclusiveStartKey, sortBy = "downloadCount", sortOrder = "desc") {
@@ -248,4 +246,42 @@ export async function searchUsers(queryPrefix, limit, exclusiveStartKey) {
   }
   const result = await doc.send(new QueryCommand(params));
   return { Items: result.Items || [], LastEvaluatedKey: result.LastEvaluatedKey };
+}
+
+// Must stay in sync with terraform/aws-app/src/register-upload.mjs.
+// Files are sharded by the first char of the lowercased name so a search can
+// hit a single NameSearch partition; "_" is the fallback for non-alphanumeric
+// or empty first characters.
+export function shardOfName(nameLower) {
+  return /^[a-z0-9]/.test(nameLower[0] || "") ? nameLower[0] : "_";
+}
+
+export async function searchFiles(queryPrefix, limit, exclusiveStartKey) {
+  const params = {
+    TableName: TABLE,
+    IndexName: "NameSearch",
+    KeyConditionExpression: "gsiname_pk = :pk AND begins_with(gsiname_sk, :skPrefix)",
+    ExpressionAttributeValues: {
+      ":pk": `NAME#FILE#${shardOfName(queryPrefix)}`,
+      ":skPrefix": queryPrefix,
+    },
+  };
+  const result = await doc.send(new QueryCommand(params));
+
+  const items = await batchGetItems(result.Items || []);
+
+  items.sort((a, b) =>
+    (b.download_count ?? 0) - (a.download_count ?? 0) ||
+    (a.name_lower || "").localeCompare(b.name_lower || "") ||
+    (a.file_id || "").localeCompare(b.file_id || "")
+  );
+
+  const offset = exclusiveStartKey?.offset ?? 0;
+  const page = items.slice(offset, offset + limit);
+  const nextOffset = offset + page.length;
+
+  return {
+    Items: page,
+    LastEvaluatedKey: nextOffset < items.length ? { offset: nextOffset } : undefined,
+  };
 }

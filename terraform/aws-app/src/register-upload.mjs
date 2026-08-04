@@ -12,6 +12,14 @@ const dynamo = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const TABLE = process.env.DYNAMODB_TABLE;
 const BUCKET = process.env.FILES_BUCKET;
 
+// Must stay in sync with sam-app/src/handlers/lib/dynamo-client.mjs.
+// Files are sharded by the first char of the lowercased name so a search can
+// hit a single NameSearch partition; "_" is the fallback for non-alphanumeric
+// or empty first characters.
+export function shardOfName(nameLower) {
+  return /^[a-z0-9]/.test(nameLower[0] || "") ? nameLower[0] : "_";
+}
+
 export async function lambdaHandler(event) {
   const batchItemFailures = [];
 
@@ -49,8 +57,8 @@ export async function lambdaHandler(event) {
       const ownerUsername = userResult.Item?.username || "unknown";
 
       const now = new Date().toISOString();
-      const shard = fileId.slice(0, 2).toLowerCase();
       const nameLower = filename.toLowerCase();
+      const shard = shardOfName(nameLower);
 
       await dynamo.send(new PutCommand({
         TableName: TABLE,

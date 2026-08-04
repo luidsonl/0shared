@@ -17,6 +17,8 @@ function makeFileItem(overrides = {}) {
   const uploadDate = overrides.upload_date || new Date().toISOString();
   const name = overrides.name || "browse.txt";
   const downloadCount = overrides.download_count || 0;
+  const nameLower = name.toLowerCase();
+  const shard = /^[a-z0-9]/.test(nameLower[0] || "") ? nameLower[0] : "_";
   return {
     PK: `USER#${overrides.owner_user_id}`,
     SK: `FILE#${fileId}`,
@@ -24,15 +26,15 @@ function makeFileItem(overrides = {}) {
     owner_user_id: overrides.owner_user_id,
     owner_username: overrides.owner_username || "browser",
     name,
-    name_lower: name.toLowerCase(),
+    name_lower: nameLower,
     size: overrides.size || 100,
     content_type: overrides.content_type || "text/plain",
     upload_date: uploadDate,
     download_count: downloadCount,
     gsidate_pk: "FILE#DATE",
     gsidate_sk: `${uploadDate}#${fileId}`,
-    gsiname_pk: `NAME#FILE#${fileId.slice(0, 2).toLowerCase()}`,
-    gsiname_sk: `${name.toLowerCase()}#${fileId}`,
+    gsiname_pk: `NAME#FILE#${shard}`,
+    gsiname_sk: `${nameLower}#${fileId}`,
     gsidown_pk: "FILE#DOWN",
     gsidown_sk: `${String(downloadCount).padStart(10, "0")}#${fileId}`,
   };
