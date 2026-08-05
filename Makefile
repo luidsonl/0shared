@@ -12,7 +12,7 @@ TF          ?= terraform
 STACK_NAME  ?= app-0shared-backend
 REGION      ?= us-east-1
 
-.PHONY: all deploy deploy-full bootstrap infra backend frontend build-frontend destroy destroy-backend destroy-frontend
+.PHONY: all deploy deploy-full bootstrap infra backend frontend build-frontend frontend-push destroy destroy-backend destroy-frontend
 
 all: deploy
 
@@ -48,6 +48,15 @@ frontend: build-frontend
 # Build the React SPA (run before the Terraform upload step)
 build-frontend:
 	cd frontend && npm install && npm run build
+
+# Force re-upload of the current dist/ + CloudFront invalidation, bypassing the
+# terraform null_resource trigger check (escape hatch for stale deploys).
+frontend-push:
+	@echo "--> Uploading to S3..."
+	aws s3 sync frontend/dist/ "s3://$$(cd terraform/aws-frontend && $(TF) output -raw bucket_name)/" --delete
+	@echo "--> Invalidating CloudFront..."
+	aws cloudfront create-invalidation --distribution-id "$$(cd terraform/aws-frontend && $(TF) output -raw cloudfront_id)" --paths "/*"
+	@echo "--> Done!"
 
 # ── Teardown (reverse order) ─────────────────────────────────────────────────
 destroy: destroy-frontend destroy-backend

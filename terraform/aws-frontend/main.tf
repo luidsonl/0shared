@@ -175,13 +175,16 @@ resource "aws_cloudfront_distribution" "main" {
 resource "null_resource" "frontend_deploy" {
   depends_on = [aws_s3_bucket.frontend, aws_cloudfront_distribution.main]
 
-  # Re-runs whenever any frontend source file changes. The actual build is
-  # performed by `make build-frontend` (root Makefile) before `terraform apply`;
-  # here we only upload the pre-built dist/ and invalidate CloudFront.
+  # Re-runs whenever any frontend source file OR build output changes. The
+  # actual build is performed by `make build-frontend` (root Makefile) before
+  # `terraform apply`; here we only upload the pre-built dist/ and invalidate
+  # CloudFront. dist/ is included in the hash so that a rebuild that leaves the
+  # sources untouched (e.g. reverting a previous change) still re-deploys.
   triggers = {
     build_hash = sha1(join("|", concat(
       [for f in fileset("${path.module}/../../frontend/src", "**/*") : filemd5("${path.module}/../../frontend/src/${f}")],
       [for f in fileset("${path.module}/../../frontend/public", "**/*") : filemd5("${path.module}/../../frontend/public/${f}")],
+      [for f in fileset("${path.module}/../../frontend/dist", "**/*") : filemd5("${path.module}/../../frontend/dist/${f}")],
       [
         filemd5("${path.module}/../../frontend/package.json"),
         filemd5("${path.module}/../../frontend/vite.config.ts"),
