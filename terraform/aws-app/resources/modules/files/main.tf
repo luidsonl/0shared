@@ -16,6 +16,27 @@ resource "aws_s3_bucket_public_access_block" "this" {
   restrict_public_buckets = true
 }
 
+# Abort multipart uploads that are initiated but never completed (client died,
+# tab closed mid-upload). Without this, abandoned parts accumulate forever.
+# Applies to existing uploads too. ~3 days is enough since parts only get
+# aborted when the upload is never finished.
+resource "aws_s3_bucket_lifecycle_configuration" "this" {
+  bucket = aws_s3_bucket.this.id
+
+  rule {
+    id     = "abort-incomplete-multipart-uploads"
+    status = "Enabled"
+
+    filter {
+      prefix = "uploads/"
+    }
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 3
+    }
+  }
+}
+
 resource "aws_s3_bucket_cors_configuration" "this" {
   bucket = aws_s3_bucket.this.id
 
